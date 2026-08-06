@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stinger Studio</title>
+<style>
+  :root{
+    --ink:#0d0f14; --panel:#161a23; --panel2:#1d2230; --line:#2a3142;
+    --txt:#e7ebf2; --dim:#8b95a8; --acc:#ff5c8a; --acc2:#5cc8ff;
+    --good:#54e08a; --bad:#ff6b6b;
+    --mono:'SFMono-Regular',ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:
+      radial-gradient(1200px 600px at 80% -10%, #21283a 0%, transparent 60%),
+      var(--ink);
+    color:var(--txt);
+    font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
+    overflow:hidden;
+  }
+  header{padding:18px 26px 14px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:14px}
+  h1{margin:0;font-size:19px;letter-spacing:-.02em;font-weight:700}
+  h1 .dot{color:var(--acc)}
+  .sub{color:var(--dim);font-size:12px}
+  .status{margin-left:auto;font-size:11px;font-family:var(--mono);padding:4px 10px;border-radius:6px;background:var(--panel)}
+  .status.ok{color:var(--good)} .status.bad{color:var(--bad)}
+
+  .wrap{display:grid;grid-template-columns:330px 1fr;height:calc(100% - 53px)}
+  .controls{padding:20px;border-right:1px solid var(--line);overflow-y:auto}
+  .stage{padding:20px;display:flex;flex-direction:column;gap:14px;overflow-y:auto}
+
+  .group{margin-bottom:20px}
+  .group>label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin-bottom:8px;font-weight:600}
+
+  .drop{border:1.5px dashed var(--line);border-radius:11px;padding:16px;text-align:center;cursor:pointer;transition:.15s;background:var(--panel)}
+  .drop:hover,.drop.over{border-color:var(--acc);background:var(--panel2)}
+  .drop p{margin:0;font-size:12px;color:var(--dim)} .drop b{color:var(--txt)}
+  .thumbs{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+  .thumb{position:relative;width:44px;height:44px;border-radius:7px;overflow:hidden;
+    background:repeating-conic-gradient(#222 0 25%,#2c2c2c 0 50%) 0/12px 12px;border:1px solid var(--line)}
+  .thumb img{width:100%;height:100%;object-fit:contain}
+  .thumb .x{position:absolute;top:-5px;right:-5px;width:17px;height:17px;border-radius:50%;background:var(--acc);color:#fff;border:none;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center}
+
+  .styles{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .styles button{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:9px;border-radius:8px;cursor:pointer;font-size:12px;transition:.12s;text-transform:capitalize}
+  .styles button:hover{border-color:var(--acc2)}
+  .styles button.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+  .row label{font-size:12px;color:var(--dim)}
+  .row .val{font-family:var(--mono);font-size:11px;color:var(--acc2);min-width:50px;text-align:right}
+  .row.hide{display:none}
+  input[type=range]{flex:1;accent-color:var(--acc)}
+  input[type=checkbox]{accent-color:var(--acc);width:15px;height:15px}
+  input[type=color]{background:var(--panel);border:1px solid var(--line);border-radius:6px;width:38px;height:26px;padding:2px;cursor:pointer}
+  select{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:7px;padding:6px;font-size:12px}
+  .seedfield{flex:1;background:var(--panel);color:var(--acc2);border:1px solid var(--line);border-radius:7px;
+    padding:6px 8px;font-family:var(--mono);font-size:11px;min-width:0}
+  .mini{background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:7px;
+    padding:6px 9px;cursor:pointer;font-size:12px;white-space:nowrap}
+  .mini:hover{border-color:var(--acc2)}
+  .mini.danger:hover{border-color:var(--bad);color:var(--bad)}
+  .anchorgrid{display:grid;grid-template-columns:repeat(3,19px);grid-template-rows:repeat(3,19px);gap:3px}
+  .anchorgrid button{background:var(--panel);border:1px solid var(--line);border-radius:4px;cursor:pointer;padding:0}
+  .anchorgrid button:hover{border-color:var(--acc2)}
+  .anchorgrid button.on{background:var(--acc);border-color:var(--acc)}
+  .hint{font-size:11px;color:var(--acc2);line-height:1.5;margin-top:2px}
+  .filerow{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+  .filename{flex:1;font-family:var(--mono);font-size:11px;color:var(--dim);overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+
+  .preview-card{background:#000;border-radius:13px;overflow:hidden;border:1px solid var(--line);position:relative}
+  .checker{position:absolute;inset:0;background:repeating-conic-gradient(#1a1a1a 0 25%,#242424 0 50%) 0/26px 26px}
+  canvas{display:block;width:100%;height:auto;position:relative}
+  .scenebadge{position:absolute;top:9px;left:11px;font-family:var(--mono);font-size:10px;background:#0009;padding:3px 8px;border-radius:5px;color:var(--good);backdrop-filter:blur(4px)}
+
+  .playbar{display:flex;align-items:center;gap:12px}
+  .playbar button{background:var(--acc);border:none;color:#fff;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
+  .playbar input{flex:1;accent-color:var(--acc2)}
+  .tpoint{font-family:var(--mono);font-size:11px;color:var(--dim);white-space:nowrap}
+  .tpoint b{color:var(--good)}
+
+  .actions{display:flex;gap:12px;align-items:center}
+  .gen{flex:1;background:linear-gradient(90deg,var(--acc),#ff7aa0);border:none;color:#fff;padding:14px;border-radius:11px;cursor:pointer;font-size:15px;font-weight:700;letter-spacing:.01em;transition:.15s}
+  .gen:hover{filter:brightness(1.08)} .gen:disabled{opacity:.5;cursor:not-allowed;filter:none}
+  .gen.working{background:var(--panel2);color:var(--dim)}
+  .genalt{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:14px 16px;border-radius:11px;cursor:pointer;font-size:13px;font-weight:600;transition:.15s;white-space:nowrap}
+  .genalt:hover{border-color:var(--acc2)} .genalt:disabled{opacity:.5;cursor:not-allowed}
+
+  .progress{max-height:0;overflow:hidden;opacity:0;transition:.25s}
+  .progress.show{max-height:60px;opacity:1;margin-top:2px}
+  .progress-bar{height:9px;background:var(--panel2);border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+  .progress-fill{height:100%;width:0%;border-radius:6px;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .2s ease}
+  .progress-label{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:6px}
+
+  .result{background:#0a0c11;border:1px solid var(--line);border-radius:11px;padding:0;max-height:0;overflow:hidden;transition:.3s;opacity:0}
+  .result.show{max-height:260px;opacity:1;padding:16px;overflow-y:auto}
+  .result h3{margin:0 0 4px;font-size:14px}
+  .result .meta{font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.7}
+  .result .meta b{color:var(--good)}
+  .result .save{margin-top:12px;background:var(--good);border:none;color:#04210f;padding:10px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600}
+  .result.err{border-color:var(--bad)} .result.err h3{color:var(--bad)}
+  .result .errtext{font-family:var(--mono);font-size:11px;color:var(--dim);white-space:pre-wrap;max-height:90px;overflow:auto;margin-top:6px}
+
+  .note{font-size:11px;color:var(--dim);line-height:1.6}
+  .note b{color:var(--txt)}
+  .empty{color:var(--dim);font-size:12px;text-align:center}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid #fff5;border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:7px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Stinger Studio<span class="dot">.</span></h1>
+  <span class="sub">OBS emote transitions</span>
+  <span class="status" id="status">checking…</span>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <div class="group">
+      <label>Preset</label>
+      <div class="row">
+        <select id="preset" style="flex:1"><option value="">— none —</option></select>
+      </div>
+      <div class="filerow">
+        <button class="mini" id="presetSave" style="flex:1">Save as…</button>
+        <button class="mini danger" id="presetDel" style="flex:1">Delete</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <label>Emotes</label>
+      <div class="drop" id="drop">
+        <p><b>Drop images</b> or click<br>PNG, GIF and animated WebP work</p>
+        <input type="file" id="file" accept="image/*" multiple hidden>
+      </div>
+      <div class="thumbs" id="thumbs"></div>
+    </div>
+
+    <div class="group">
+      <label>Style</label>
+      <div class="styles" id="styles"></div>
+      <div class="row hide" id="dirRow" style="margin-top:10px">
+        <label>Direction</label>
+        <select id="dir"></select>
+      </div>
+    </div>
+
+    <div class="group">
+      <label>Adjust</label>
+      <div class="row"><label>Emote size</label><input type="range" id="size" min="80" max="500" step="10" value="160"><span class="val" id="sizeV">160px</span></div>
+      <div class="row"><label>Amount</label><input type="range" id="dens" min="1" max="3.5" step="0.1" value="2.0"><span class="val" id="densV">2.0×</span></div>
+      <div class="row"><label>Duration</label><input type="range" id="dur" min="0.6" max="5" step="0.1" value="1.2"><span class="val" id="durV">1.2s</span></div>
+      <div class="row"><label>Hold</label><input type="range" id="hold" min="0" max="0.5" step="0.02" value="0.08"><span class="val" id="holdV">0.08</span></div>
+      <div class="row"><label>Transition point</label><input type="range" id="infrac" min="0.2" max="0.8" step="0.01" value="0.5"><span class="val" id="infracV">50%</span></div>
+      <div class="row"><label>Easing</label>
+        <select id="easing">
+          <option value="smooth">smooth</option>
+          <option value="linear">linear</option>
+          <option value="overshoot">overshoot</option>
+          <option value="bounce">bounce</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="group">
+      <label>Logo</label>
+      <div class="filerow">
+        <button class="mini" id="logoPick">Logo…</button>
+        <span class="filename" id="logoName">none</span>
+        <button class="mini danger" id="logoClear">×</button>
+        <input type="file" id="logoFile" accept="image/*" hidden>
+      </div>
+      <div id="logoOpts" style="display:none">
+        <div class="row"><label>Size</label><input type="range" id="logoSize" min="5" max="90" step="1" value="30"><span class="val" id="logoSizeV">30%</span></div>
+        <div class="row"><label>Position</label><div class="anchorgrid" id="anchorGrid"></div></div>
+        <div class="row"><label>Nudge X</label><input type="range" id="logoDx" min="-40" max="40" step="1" value="0"><span class="val" id="logoDxV">0%</span></div>
+        <div class="row"><label>Nudge Y</label><input type="range" id="logoDy" min="-40" max="40" step="1" value="0"><span class="val" id="logoDyV">0%</span></div>
+        <div class="row"><label>Entry</label><select id="logoIn"></select></div>
+        <div class="row"><label>Exit</label><select id="logoOut"></select></div>
+        <div class="hint" id="logoHint" style="display:none"></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <label>Emote effects</label>
+      <div class="row"><label>Outline</label><input type="range" id="outline" min="0" max="4" step="1" value="0"><span class="val" id="outlineV">off</span></div>
+      <div class="row"><label>Outline colour</label><input type="color" id="outlineColor" value="#000000"></div>
+      <div class="row"><label>Drop shadow</label><input type="checkbox" id="shadow"></div>
+    </div>
+
+    <div class="group">
+      <label>Output</label>
+      <div class="row"><label>Resolution</label>
+        <select id="res">
+          <option value="1920x1080">1920×1080</option>
+          <option value="2560x1440">2560×1440</option>
+          <option value="1280x720">1280×720</option>
+        </select>
+      </div>
+      <div class="row"><label>FPS</label><input type="range" id="fps" min="0" max="5" step="1" value="1"><span class="val" id="fpsV">30</span></div>
+      <div class="row"><label>Quality</label><input type="range" id="quality" min="18" max="40" step="1" value="28"><span class="val" id="qualityV">28</span></div>
+      <div class="row"><label>Format</label>
+        <select id="fmt">
+          <option value="webm">WebM (VP9 alpha)</option>
+          <option value="mov">MOV (ProRes 4444)</option>
+          <option value="png">PNG sequence</option>
+        </select>
+      </div>
+      <div class="filerow">
+        <button class="mini" id="soundPick">Sound…</button>
+        <span class="filename" id="soundName">none</span>
+        <button class="mini danger" id="soundClear">×</button>
+        <input type="file" id="soundFile" accept="audio/*" hidden>
+      </div>
+      <div class="filerow">
+        <input class="seedfield" id="seed" value="12345" inputmode="numeric">
+        <button class="mini" id="reroll" title="Random seed">🎲</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="preview-card">
+      <div class="checker"></div>
+      <div class="scenebadge" id="badge">Scene A</div>
+      <canvas id="cv" width="640" height="360"></canvas>
+    </div>
+
+    <div class="playbar">
+      <button id="play">❚❚</button>
+      <input type="range" id="scrub" min="0" max="100" value="0">
+      <span class="tpoint">transition point: <b id="tpt">600 ms</b></span>
+    </div>
+
+    <div class="actions">
+      <button class="gen" id="gen">Generate WebM</button>
+      <button class="genalt" id="genAll">Render all styles</button>
+    </div>
+
+    <div class="progress" id="progress">
+      <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
+      <div class="progress-label" id="progLabel">Starting…</div>
+    </div>
+
+    <div class="result" id="result">
+      <h3 id="resTitle">Done</h3>
+      <div class="meta" id="resMeta"></div>
+      <div class="errtext" id="errText" style="display:none"></div>
+      <button class="save" id="saveBtn" style="display:none">Save file…</button>
+    </div>
+
+    <div class="note" id="obsNote" style="display:none">
+      In OBS: <b>Scene Transitions → + → Stinger</b> → pick this file → set the
+      <b>transition point</b> shown above. Preview here is an approximation; the
+      saved file is the real transparent render.
+    </div>
+  </div>
+</div>
+
+<script>
+const STYLES=["rain","burst","swipe","spiral","swarm",
+              "rows","columns","downpour","zoom","wipe","shockwave","vortex"];
+// styles that take a direction, and the default that reproduces the original
+// motion — mirrors engine.DIRECTIONAL
+const DIRECTIONAL={rain:"down",swipe:"right",wipe:"right",rows:"right",columns:"down",downpour:"down"};
+const DIR_OPTS={rows:["left","right"],columns:["up","down"],downpour:["down","up"],
+                rain:["down","up","left","right"],swipe:["right","left","up","down"],
+                wipe:["right","left","up","down"]};
+const FPS_STEPS=[24,30,48,60,90,120];
+const EXT={webm:".webm",mov:".mov",png:".zip"};
+const FMT_LABEL={webm:"WebM",mov:"MOV",png:"PNG sequence"};
+const STAGGER=0.4;
+
+const LOGO_ANIMS=["pop","slam","spin","fade","drop","rise","flip","swing","glitch","zoom","none"];
+const LOGO_ANCHORS=["tl","tc","tr","ml","mc","mr","bl","bc","br"];
+const LOGO_ENTRY=0.4, LOGO_EXIT=0.4;
+// a logo needs roughly this much hold to read as an animation rather than a flash
+const LOGO_MIN_HOLD=0.26;
+
+let emotes=[]; let style="rain";
+let logo=null, logoAnchor="mc";
+let playing=true, tNorm=0, lastTs=0;
+let lastOut=null, lastFmt="webm";
+let audioFile=null;
+let presets=[];
+
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const CW=640, CH=360;
+
+// ---- backend readiness ----
+window.addEventListener('pywebviewready', async ()=>{
+  try{
+    const r=await window.pywebview.api.ffmpeg_ok();
+    const s=$("status");
+    if(r.ok){s.textContent="render engine ready";s.classList.add("ok");}
+    else{s.textContent="ffmpeg not found";s.classList.add("bad");}
+  }catch(e){$("status").textContent="bridge error";$("status").classList.add("bad");}
+  loadPresets();
+});
+
+// ---- file loading ----
+const drop=$("drop"), fileInput=$("file");
+drop.onclick=()=>fileInput.click();
+drop.ondragover=e=>{e.preventDefault();drop.classList.add("over")};
+drop.ondragleave=()=>drop.classList.remove("over");
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove("over");addFiles(e.dataTransfer.files)};
+fileInput.onchange=e=>addFiles(e.target.files);
+
+// Decode animated GIF / WebP into frames when the browser can. Chromium (which
+// is what the app window runs on) has ImageDecoder; anything else falls back to
+// a single still frame, which the engine still animates correctly on render.
+async function decodeFrames(dataUrl,type){
+  const still=await new Promise(res=>{const i=new Image();i.onload=()=>res(i);i.src=dataUrl});
+  if(typeof ImageDecoder==="undefined") return {frames:[still],durations:[0],total:0};
+  try{
+    const buf=await (await fetch(dataUrl)).arrayBuffer();
+    if(!(await ImageDecoder.isTypeSupported(type))) return {frames:[still],durations:[0],total:0};
+    const dec=new ImageDecoder({data:buf,type});
+    await dec.tracks.ready;
+    const track=dec.tracks.selectedTrack;
+    const n=track.frameCount||1;
+    if(n<=1){dec.close&&dec.close();return {frames:[still],durations:[0],total:0}}
+    const frames=[],durs=[];
+    for(let i=0;i<n;i++){
+      const {image}=await dec.decode({frameIndex:i});
+      frames.push(await createImageBitmap(image));
+      durs.push(image.duration?image.duration/1000:100);  // µs -> ms
+      image.close&&image.close();
+    }
+    dec.close&&dec.close();
+    return {frames,durations:durs,total:durs.reduce((a,b)=>a+b,0)};
+  }catch(e){ return {frames:[still],durations:[0],total:0}; }
+}
+
+function addFiles(list){
+  [...list].forEach(f=>{
+    if(!f.type.startsWith("image/"))return;
+    const reader=new FileReader();
+    reader.onload=async ev=>{
+      const dataUrl=ev.target.result;
+      const anim=await decodeFrames(dataUrl,f.type);
+      const f0=anim.frames[0];
+      emotes.push({name:f.name,dataUrl,frames:anim.frames,durations:anim.durations,
+                   total:anim.total,fx:null,fxKey:null,
+                   nw:f0.width||f0.naturalWidth||1, nh:f0.height||f0.naturalHeight||1,
+                   dims:{w:1,h:1}});
+      renderThumbs();buildSprites();
+    };
+    reader.readAsDataURL(f);
+  });
+}
+function renderThumbs(){
+  const t=$("thumbs");t.innerHTML="";
+  emotes.forEach((e,i)=>{
+    const d=document.createElement("div");d.className="thumb";
+    d.innerHTML=`<img src="${e.dataUrl}"><button class="x" data-i="${i}">×</button>`;
+    t.appendChild(d);
+  });
+  t.querySelectorAll(".x").forEach(b=>b.onclick=ev=>{
+    ev.stopPropagation();emotes.splice(+b.dataset.i,1);renderThumbs();buildSprites();
+  });
+}
+
+// ---- emote effects ----
+// The engine bakes outline/shadow into each emote once at load time, which
+// changes the emote's pixel dimensions. The preview does the same, at the same
+// render-pixel size and with the same padding, so sprites end up the same size
+// on screen in both. Baking beats per-sprite shadowBlur at 60fps, too.
+function fxKey(){return `${+$("outline").value}|${$("outlineColor").value}|${$("shadow").checked?1:0}|${+$("size").value}`}
+function baseDims(e,epx){
+  const ar=(e.nw/e.nh)||1;
+  return ar>=1?{w:epx,h:Math.max(1,Math.round(epx/ar))}
+              :{w:Math.max(1,Math.round(epx*ar)),h:epx};
+}
+function bakeEmote(e,epx){
+  const ow=+$("outline").value, col=$("outlineColor").value, sh=$("shadow").checked;
+  const d=baseDims(e,epx);
+  if(!ow && !sh){ e.fx=null; e.dims=d; return; }
+  // padding mirrors engine.apply_outline / apply_shadow
+  const padOut=ow>0?ow+2:0;
+  const blur=Math.max(2,epx*0.05), off=Math.max(2,Math.floor(epx*0.035));
+  const padSh=sh?Math.ceil(blur*3+off+2):0;
+  const pad=padOut+padSh;
+  e.dims={w:d.w+2*pad,h:d.h+2*pad};
+  e.fx=e.frames.map(src=>{
+    const c=document.createElement("canvas");
+    c.width=e.dims.w; c.height=e.dims.h;
+    const g=c.getContext("2d");
+    if(ow){
+      // silhouette in the outline colour, stamped around a ring
+      const sil=document.createElement("canvas");
+      sil.width=d.w; sil.height=d.h;
+      const sg=sil.getContext("2d");
+      sg.drawImage(src,0,0,d.w,d.h);
+      sg.globalCompositeOperation="source-in";
+      sg.fillStyle=col; sg.fillRect(0,0,d.w,d.h);
+      for(let a=0;a<20;a++){
+        const th=a/20*Math.PI*2;
+        g.drawImage(sil,pad+Math.cos(th)*ow,pad+Math.sin(th)*ow);
+      }
+    }
+    if(sh){
+      g.save();
+      g.shadowColor="rgba(0,0,0,0.5)";
+      g.shadowBlur=blur;
+      g.shadowOffsetX=off; g.shadowOffsetY=off;
+      g.drawImage(src,pad,pad,d.w,d.h);
+      g.restore();
+    }
+    g.drawImage(src,pad,pad,d.w,d.h);
+    return c;
+  });
+}
+function refreshEffects(){
+  const key=fxKey(), epx=+$("size").value;
+  for(const e of emotes){
+    if(e.fxKey!==key){ bakeEmote(e,epx); e.fxKey=key; }
+  }
+}
+function emoteFrame(e,tMs,phase){
+  const src=e.fx||e.frames;
+  if(src.length===1||!e.total) return src[0];
+  let pos=(phase*e.total+tMs)%e.total, acc=0;
+  for(let i=0;i<src.length;i++){acc+=e.durations[i];if(pos<acc)return src[i]}
+  return src[src.length-1];
+}
+
+// ---- style buttons ----
+const sc=$("styles");
+STYLES.forEach(s=>{
+  const b=document.createElement("button");b.textContent=s;b.dataset.s=s;
+  if(s===style)b.classList.add("on");
+  b.onclick=()=>{style=s;[...sc.children].forEach(c=>c.classList.toggle("on",c.dataset.s===s));
+    syncDirection();buildSprites()};
+  sc.appendChild(b);
+});
+function syncDirection(){
+  const opts=DIR_OPTS[style];
+  const row=$("dirRow"), sel=$("dir");
+  if(!opts){row.classList.add("hide");return}
+  row.classList.remove("hide");
+  const prev=sel.value;
+  sel.innerHTML="";
+  opts.forEach(o=>{const op=document.createElement("option");op.value=o;op.textContent=o;sel.appendChild(op)});
+  sel.value=opts.includes(prev)?prev:DIRECTIONAL[style];
+}
+$("dir").onchange=()=>buildSprites();
+
+// ---- sliders ----
+function fmt(id,v){
+  if(id==="dur")return v+"s";
+  if(id==="size")return v+"px";
+  if(id==="dens")return v+"×";
+  if(id==="fps")return String(FPS_STEPS[+v]);
+  if(id==="infrac")return Math.round(v*100)+"%";
+  if(id==="outline")return +v?v+"px":"off";
+  if(id==="quality"){
+    const q=+v;
+    return q+(q<=22?" best":q<=28?" good":q<=34?" small":" tiny");
+  }
+  return v;
+}
+["dur","fps","size","dens","hold","infrac","quality","outline"].forEach(id=>{
+  $(id).oninput=()=>{$(id+"V").textContent=fmt(id,$(id).value);buildSprites();updateTpt()};
+});
+$("res").onchange=()=>buildSprites();
+$("easing").onchange=()=>draw();
+$("outlineColor").oninput=()=>buildSprites();
+$("shadow").onchange=()=>buildSprites();
+$("fmt").onchange=()=>{$("gen").textContent="Generate "+FMT_LABEL[$("fmt").value]};
+$("seed").oninput=()=>buildSprites();
+$("reroll").onclick=()=>{$("seed").value=Math.floor(Math.random()*4294967296);buildSprites()};
+function curFps(){return FPS_STEPS[+$("fps").value]}
+
+// ---- sound ----
+$("soundPick").onclick=()=>$("soundFile").click();
+$("soundFile").onchange=e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const r=new FileReader();
+  r.onload=ev=>{audioFile={name:f.name,dataUrl:ev.target.result};$("soundName").textContent=f.name};
+  r.readAsDataURL(f);
+};
+$("soundClear").onclick=()=>{audioFile=null;$("soundFile").value="";$("soundName").textContent="none"};
+
+// ---- logo ----
+LOGO_ANIMS.forEach(a=>{
+  const o=document.createElement("option");o.value=a;o.textContent=a;$("logoIn").appendChild(o);
+  const o2=document.createElement("option");o2.value=a;o2.textContent=a;$("logoOut").appendChild(o2);
+});
+$("logoOut").insertBefore(new Option("mirror entry",""),$("logoOut").firstChild);
+$("logoOut").value="";
+const ag=$("anchorGrid");
+LOGO_ANCHORS.forEach(a=>{
+  const b=document.createElement("button");b.dataset.a=a;b.title=a;
+  if(a===logoAnchor)b.classList.add("on");
+  b.onclick=()=>{logoAnchor=a;[...ag.children].forEach(c=>c.classList.toggle("on",c.dataset.a===a))};
+  ag.appendChild(b);
+});
+$("logoPick").onclick=()=>$("logoFile").click();
+$("logoFile").onchange=e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const r=new FileReader();
+  r.onload=async ev=>{
+    const dataUrl=ev.target.result;
+    const anim=await decodeFrames(dataUrl,f.type);
+    const f0=anim.frames[0];
+    logo={name:f.name,dataUrl,frames:anim.frames,durations:anim.durations,total:anim.total,
+          nw:f0.width||f0.naturalWidth||1, nh:f0.height||f0.naturalHeight||1};
+    $("logoName").textContent=f.name;
+    $("logoOpts").style.display="block";
+    checkLogoHold(true);
+  };
+  r.readAsDataURL(f);
+};
+$("logoClear").onclick=()=>{
+  logo=null;$("logoFile").value="";$("logoName").textContent="none";
+  $("logoOpts").style.display="none";$("logoHint").style.display="none";
+};
+["logoSize","logoDx","logoDy"].forEach(id=>{
+  $(id).oninput=()=>{$(id+"V").textContent=$(id).value+"%"};
+});
+// The logo only exists while the emotes have the screen covered, so a short
+// hold gives it almost no time. Nudge the slider up (visibly) on first load.
+function checkLogoHold(autofix){
+  if(!logo){$("logoHint").style.display="none";return}
+  const h=+$("hold").value;
+  if(h<LOGO_MIN_HOLD){
+    if(autofix){
+      $("hold").value=LOGO_MIN_HOLD;
+      $("holdV").textContent=fmt("hold",$("hold").value);
+      $("logoHint").textContent="Hold raised to "+LOGO_MIN_HOLD+" so the logo has room to animate.";
+      $("logoHint").style.display="block";
+      updateTpt();
+      return;
+    }
+    $("logoHint").textContent="Hold is low — the logo will only flash briefly.";
+    $("logoHint").style.display="block";
+  }else $("logoHint").style.display="none";
+}
+$("hold").addEventListener("input",()=>checkLogoHold(false));
+
+// ---- rng: byte-for-byte the same LCG as engine.Rng, so a seed produces the
+//      same layout here as it does in the render ----
+function Rng(seed){
+  let s=((+seed)>>>0)%4294967296;
+  const next=()=>{s=(s*1664525+1013904223)%4294967296;return s/4294967296};
+  return {next,
+    uniform:(a,b)=>a+next()*(b-a),
+    index:n=>Math.floor(next()*n)%n,
+    shuffle:arr=>{for(let i=arr.length-1;i>0;i--){const j=Math.floor(next()*(i+1));
+      const t=arr[i];arr[i]=arr[j];arr[j]=t}}};
+}
+
+// ---- sprite model (mirrors engine.make_sprite_layout exactly) ----
+let sprites=[], viewScale=1, renderW=1920, renderH=1080;
+function buildSprites(){
+  sprites=[];
+  if(!emotes.length){draw();return}
+  refreshEffects();
+  const parts=$("res").value.split("x").map(Number);
+  renderW=parts[0]; renderH=parts[1];
+  viewScale=CW/renderW;
+  const epx=+$("size").value;
+  const dens=+$("dens").value;
+  // the layout is built in RENDER pixels and scaled down only when drawing,
+  // otherwise the preview and the render would tile differently
+  const layoutDens=(style==="downpour")?dens*1.5:dens;
+  const cell=Math.max(8,epx*0.62/Math.max(1,Math.sqrt(layoutDens)));
+  const cols=Math.ceil(renderW/cell)+1, rows=Math.ceil(renderH/cell)+1;
+  const r=Rng($("seed").value||0);
+  for(let yy=0;yy<rows;yy++)for(let xx=0;xx<cols;xx++){
+    const idx=r.index(emotes.length);
+    sprites.push({
+      em:emotes[idx],
+      hx:xx*cell+cell/2+r.uniform(-cell*0.25,cell*0.25),
+      hy:yy*cell+cell/2+r.uniform(-cell*0.25,cell*0.25),
+      row:yy,col:xx,
+      seed:r.next(), rot:r.uniform(0,360), spin:r.uniform(-120,120),
+      ang:r.uniform(0,2*Math.PI), dist:r.uniform(0.5,1.0),
+      delay:r.next(), phase:r.next(),
+    });
+  }
+  r.shuffle(sprites);
+}
+
+// ---- timing + easing (mirrors engine.py) ----
+function clamp01(v){return v<0?0:v>1?1:v}
+function easeIO(t){return 0.5-0.5*Math.cos(Math.PI*t)}
+function easeLinear(t){return t}
+function easeOvershoot(t){const c1=1.5,c3=c1+1,u=t-1;return 1+c3*u*u*u+c1*u*u}
+function easeBounce(t){
+  const n1=7.5625,d1=2.75;
+  if(t<1/d1)return n1*t*t;
+  if(t<2/d1){t-=1.5/d1;return n1*t*t+0.75}
+  if(t<2.5/d1){t-=2.25/d1;return n1*t*t+0.9375}
+  t-=2.625/d1;return n1*t*t+0.984375;
+}
+const EASE={smooth:easeIO,linear:easeLinear,overshoot:easeOvershoot,bounce:easeBounce};
+function windows(hold,inFrac){
+  inFrac=Math.min(0.95,Math.max(0.05,inFrac));
+  let half=Math.max(0,hold)/2;
+  half=Math.min(half,inFrac*0.9,(1-inFrac)*0.9);
+  return [inFrac,inFrac-half,inFrac+half];
+}
+function coverage(t,hold,inFrac){
+  const w=windows(hold,inFrac);
+  if(t<w[1])return easeIO(t/w[1]);
+  if(t>w[2])return easeIO((1-t)/(1-w[2]));
+  return 1;
+}
+function stagger(cov,delay){return clamp01((cov-delay*STAGGER)/(1-STAGGER))}
+
+// ---- logo animation (mirrors engine.logo_phase / logo_transform) ----
+function logoPhase(t,hold,inFrac){
+  const w=windows(hold,inFrac), span=w[2]-w[1];
+  if(span<=1e-9)return null;
+  const u=(t-w[1])/span;
+  if(u<0||u>1)return null;
+  if(u<LOGO_ENTRY)return ["in",u/LOGO_ENTRY];
+  if(u>1-LOGO_EXIT)return ["out",(1-u)/LOGO_EXIT];
+  return ["hold",1];
+}
+function eoCubic(p){return 1-Math.pow(1-p,3)}
+function eoQuart(p){return 1-Math.pow(1-p,4)}
+function eoQuint(p){return 1-Math.pow(1-p,5)}
+function logoTransform(anim,p,jit){
+  let sx=1,sy=1,rot=0,dx=0,dy=0,a=1,split=0;
+  if(anim==="none"){a=p>0?1:0}
+  else if(anim==="fade"){a=p}
+  else if(anim==="pop"){sx=sy=easeOvershoot(p);a=Math.min(1,p*2)}
+  else if(anim==="slam"){sx=sy=2.5-1.5*eoQuint(p);a=Math.min(1,p*3)}
+  else if(anim==="spin"){const e=eoCubic(p);rot=(1-e)*720;sx=sy=e;a=Math.min(1,p*2)}
+  else if(anim==="drop"){dy=-(1-easeBounce(p))*0.7;a=Math.min(1,p*3)}
+  else if(anim==="rise"){dy=(1-eoCubic(p))*0.7;a=Math.min(1,p*3)}
+  else if(anim==="flip"){sx=Math.max(0.02,Math.abs(Math.cos((1-p)*Math.PI*1.5)));a=Math.min(1,p*2)}
+  else if(anim==="swing"){rot=Math.sin((1-p)*Math.PI*3)*30*(1-p);a=Math.min(1,p*2)}
+  else if(anim==="glitch"){
+    const amp=1-p;
+    a=p>0.15?1:p/0.15;
+    dx=(jit-0.5)*0.06*amp; dy=(((jit*7)%1)-0.5)*0.04*amp; split=amp*0.02;
+  }
+  else if(anim==="zoom"){sx=sy=0.15+0.85*eoQuart(p);a=Math.min(1,p*2.5)}
+  return {sx,sy,rot,dx,dy,alpha:a,split};
+}
+function anchorPoint(anchor,w,h,iw,ih,margin){
+  margin=margin===undefined?0.05:margin;
+  if(!LOGO_ANCHORS.includes(anchor))anchor="mc";
+  const mx=w*margin,my=h*margin;
+  const X={l:mx+iw/2,c:w/2,r:w-mx-iw/2}, Y={t:my+ih/2,m:h/2,b:h-my-ih/2};
+  return [X[anchor[1]],Y[anchor[0]]];
+}
+function drawLogo(t){
+  if(!logo)return;
+  const hold=+$("hold").value, inFrac=+$("infrac").value;
+  const ph=logoPhase(t,hold,inFrac);
+  if(!ph)return;
+  const anim=(ph[0]==="out") ? ($("logoOut").value||$("logoIn").value) : $("logoIn").value;
+  const fps=curFps(), n=Math.max(2,Math.round(fps*(+$("dur").value)));
+  const idx=Math.round(t*(n-1));
+  const jit=Rng((((+$("seed").value)||0)+idx*7919)%4294967296).next();
+  const tr=logoTransform(anim,ph[1],jit);
+  if(tr.alpha<=0.01||tr.sx<=0.01||tr.sy<=0.01)return;
+  const im=emoteFrame(logo,t*(+$("dur").value)*1000,0);
+  const baseW=renderW*(+$("logoSize").value)/100;
+  const baseH=baseW*(logo.nh/logo.nw);
+  const pt=anchorPoint(logoAnchor,renderW,renderH,baseW,baseH);
+  const ax=pt[0]+tr.dx*renderW+(+$("logoDx").value)/100*renderW;
+  const ay=pt[1]+tr.dy*renderH+(+$("logoDy").value)/100*renderH;
+  const dw=baseW*tr.sx*viewScale, dh=baseH*tr.sy*viewScale;
+  ctx.save();
+  ctx.globalAlpha=tr.alpha;
+  ctx.translate(ax*viewScale,ay*viewScale);
+  ctx.rotate(tr.rot*Math.PI/180);
+  ctx.drawImage(im,-dw/2,-dh/2,dw,dh);
+  ctx.restore();
+}
+
+function draw(){
+  ctx.clearRect(0,0,CW,CH);
+  if(!emotes.length){ctx.fillStyle="#8b95a8";ctx.font="13px sans-serif";ctx.textAlign="center";
+    ctx.fillText("Add emotes to preview the transition",CW/2,CH/2);return;}
+  const hold=+$("hold").value, inFrac=+$("infrac").value;
+  const cov=coverage(tNorm,hold,inFrac);
+  const ease=EASE[$("easing").value]||easeIO;
+  const dir=DIR_OPTS[style]?$("dir").value:null;
+  const tMs=tNorm*(+$("dur").value)*1000;
+  // work in render coordinates, scale to the canvas at blit time
+  const W=renderW, H=renderH, cx=W/2, cy=H/2, diag=Math.hypot(W,H);
+  $("badge").textContent=tNorm<inFrac?"Scene A":"Scene B";
+  $("badge").style.color=tNorm<inFrac?"#54e08a":"#5cc8ff";
+
+  function blit(im,dims,x,y,rot,a,scale){
+    if(a<=0.01||scale<=0.02)return;
+    const dw=dims.w*scale*viewScale, dh=dims.h*scale*viewScale;
+    const px=x*viewScale, py=y*viewScale;
+    const reach=Math.hypot(dw,dh)*0.5;
+    if(px+reach<0||py+reach<0||px-reach>CW||py-reach>CH)return;
+    ctx.save();ctx.globalAlpha=a;ctx.translate(px,py);ctx.rotate(rot);
+    ctx.drawImage(im,-dw/2,-dh/2,dw,dh);ctx.restore();
+  }
+
+  // ---- downpour: continuous fall, fully tiled at the transition point ----
+  if(style==="downpour"){
+    const up=dir==="up";
+    for(const s of sprites){
+      const im=emoteFrame(s.em,tMs,s.phase), dims=s.em.dims;
+      const ih=dims.h;
+      const vy=(H+2*ih)*1.25;
+      const y=s.hy+(tNorm-inFrac)*(up?-vy:vy);
+      const wob=s.seed*6.28;
+      const x=s.hx+(Math.sin(tNorm*5+wob)-Math.sin(inFrac*5+wob))*10;
+      const rot=(s.rot+s.spin*tNorm*2)*Math.PI/180;
+      let a=1;if(y<-ih*0.5||y>H+ih*0.5)a=0;
+      blit(im,dims,x,y,rot,a,1);
+    }
+    drawLogo(tNorm);
+    return;
+  }
+  // ---- zoom: rush toward camera, scaling up ----
+  if(style==="zoom"){
+    const k=ease(cov);
+    for(const s of sprites){
+      const im=emoteFrame(s.em,tMs,s.phase);
+      const dx=s.hx-cx,dy=s.hy-cy;
+      const x=cx+dx*k,y=cy+dy*k;
+      const scale=0.05+0.95*k;
+      const rot=(s.rot+s.spin*(1-cov))*Math.PI/180;
+      const a=Math.min(1,cov*1.6);
+      blit(im,s.em.dims,x,y,rot,a,scale);
+    }
+    drawLogo(tNorm);
+    return;
+  }
+
+  // ---- converge family ----
+  for(const s of sprites){
+    const im=emoteFrame(s.em,tMs,s.phase), dims=s.em.dims;
+    const iw=dims.w, ih=dims.h;
+    const hx=s.hx, hy=s.hy;
+    let fx,fy,covS;
+
+    if(style==="wipe"){
+      const hxn=hx/W, hyn=hy/H, X=(W+iw)*1.4, Y=(H+ih)*1.4;
+      let delay;
+      if(dir==="left"){fx=hx+X;fy=hy+Y;delay=1-(hxn+hyn)/2;}
+      else if(dir==="down"){fx=hx+X;fy=hy-Y;delay=((1-hxn)+hyn)/2;}
+      else if(dir==="up"){fx=hx-X;fy=hy+Y;delay=(hxn+(1-hyn))/2;}
+      else{fx=hx-X;fy=hy-Y;delay=(hxn+hyn)/2;}
+      covS=stagger(cov,clamp01(delay));
+    }else if(style==="rain"){
+      covS=stagger(cov,s.delay);
+      const reach=1+s.seed;
+      if(dir==="up"){fx=hx;fy=hy+(H+ih)*reach;}
+      else if(dir==="left"){fx=hx+(W+iw)*reach;fy=hy;}
+      else if(dir==="right"){fx=hx-(W+iw)*reach;fy=hy;}
+      else{fx=hx;fy=hy-(H+ih)*reach;}
+    }else{
+      covS=cov;
+      const ang=s.ang;
+      if(style==="burst"){const rr=diag*(0.6+0.6*s.dist);fx=cx+Math.cos(ang)*rr;fy=cy+Math.sin(ang)*rr;}
+      else if(style==="swipe"){
+        if(dir==="left"){fx=hx+(W+iw)*1.2;fy=hy;}
+        else if(dir==="up"){fx=hx;fy=hy+(H+ih)*1.2;}
+        else if(dir==="down"){fx=hx;fy=hy-(H+ih)*1.2;}
+        else{fx=hx-(W+iw)*1.2;fy=hy;}
+      }
+      else if(style==="spiral"){const a2=ang+(1-covS)*7;const rr=diag*0.7*s.dist;fx=cx+Math.cos(a2)*rr;fy=cy+Math.sin(a2)*rr;}
+      else if(style==="rows"){const lead=((s.row%2===0)===(dir==="right"));
+        fx=lead?hx-(W+iw)*1.3:hx+(W+iw)*1.3;fy=hy;}
+      else if(style==="columns"){const lead=((s.col%2===0)===(dir==="down"));
+        fy=lead?hy-(H+ih)*1.3:hy+(H+ih)*1.3;fx=hx;}
+      else if(style==="shockwave"){const dx=hx-cx,dy=hy-cy;const dist=Math.hypot(dx,dy)||1;
+        const a2=Math.atan2(dy,dx);const fr=dist+diag*0.6;fx=cx+Math.cos(a2)*fr;fy=cy+Math.sin(a2)*fr;}
+      else if(style==="vortex"){const dx=hx-cx,dy=hy-cy;const ba=Math.atan2(dy,dx);
+        const dist=Math.hypot(dx,dy);const a2=ba+(1-covS)*9;const rr=dist+(1-covS)*diag*0.5;
+        fx=cx+Math.cos(a2)*rr;fy=cy+Math.sin(a2)*rr;}
+      else{const rr=diag*(0.7+0.5*s.dist);fx=cx+Math.cos(ang)*rr;fy=cy+Math.sin(ang)*rr;}
+    }
+
+    const k=ease(covS);
+    const x=fx+(hx-fx)*k, y=fy+(hy-fy)*k;
+    const rot=(s.rot+s.spin*(1-covS))*Math.PI/180;
+    const a=Math.min(1,covS*1.6);
+    blit(im,dims,x,y,rot,a,1);
+  }
+  drawLogo(tNorm);
+}
+function loop(ts){
+  if(playing){const dur=+$("dur").value*1000;const dt=ts-lastTs;lastTs=ts;tNorm+=dt/dur;if(tNorm>1)tNorm=0;$("scrub").value=tNorm*100;}
+  else lastTs=ts;
+  draw();requestAnimationFrame(loop);
+}
+$("play").onclick=()=>{playing=!playing;$("play").textContent=playing?"❚❚":"▶";lastTs=performance.now()};
+$("scrub").oninput=()=>{playing=false;$("play").textContent="▶";tNorm=+$("scrub").value/100};
+function updateTpt(){
+  // identical arithmetic to engine.build
+  const fps=curFps(), dur=+$("dur").value;
+  const n=Math.max(2,Math.round(fps*dur));
+  const inFrac=windows(+$("hold").value,+$("infrac").value)[0];
+  $("tpt").textContent=Math.round(n*inFrac/fps*1000)+" ms";
+}
+
+// ---- presets ----
+function currentSettings(){
+  return {style, duration:+$("dur").value, hold:+$("hold").value,
+    density:+$("dens").value, emotePx:+$("size").value, res:$("res").value,
+    fps:curFps(), quality:+$("quality").value, inFrac:+$("infrac").value,
+    easing:$("easing").value, direction:DIR_OPTS[style]?$("dir").value:null,
+    outline:+$("outline").value, outlineColor:$("outlineColor").value,
+    shadow:$("shadow").checked, fmt:$("fmt").value, seed:$("seed").value,
+    logoSize:+$("logoSize").value, logoAnchor:logoAnchor,
+    logoDx:+$("logoDx").value, logoDy:+$("logoDy").value,
+    logoIn:$("logoIn").value, logoOut:$("logoOut").value};
+}
+function applySettings(s){
+  if(!s)return;
+  if(s.style&&STYLES.includes(s.style)){
+    style=s.style;[...sc.children].forEach(c=>c.classList.toggle("on",c.dataset.s===style));
+  }
+  const set=(id,v)=>{if(v!==undefined&&v!==null)$(id).value=v};
+  set("dur",s.duration);set("hold",s.hold);set("dens",s.density);set("size",s.emotePx);
+  set("res",s.res);set("quality",s.quality);set("infrac",s.inFrac);set("easing",s.easing);
+  set("outline",s.outline);set("outlineColor",s.outlineColor);set("fmt",s.fmt);
+  set("logoSize",s.logoSize);set("logoDx",s.logoDx);set("logoDy",s.logoDy);
+  set("logoIn",s.logoIn);
+  if(s.logoOut!==undefined&&s.logoOut!==null)$("logoOut").value=s.logoOut;
+  if(s.logoAnchor&&LOGO_ANCHORS.includes(s.logoAnchor)){
+    logoAnchor=s.logoAnchor;
+    [...ag.children].forEach(c=>c.classList.toggle("on",c.dataset.a===logoAnchor));
+  }
+  ["logoSize","logoDx","logoDy"].forEach(id=>{$(id+"V").textContent=$(id).value+"%"});
+  if(s.seed!==undefined&&s.seed!==null&&s.seed!=="")set("seed",s.seed);
+  if(s.fps!==undefined){const i=FPS_STEPS.indexOf(+s.fps);if(i>=0)$("fps").value=i}
+  $("shadow").checked=!!s.shadow;
+  syncDirection();
+  if(s.direction&&DIR_OPTS[style]&&DIR_OPTS[style].includes(s.direction))$("dir").value=s.direction;
+  ["dur","fps","size","dens","hold","infrac","quality","outline"].forEach(id=>{
+    $(id+"V").textContent=fmt(id,$(id).value)});
+  $("gen").textContent="Generate "+FMT_LABEL[$("fmt").value];
+  buildSprites();updateTpt();
+}
+async function loadPresets(sel){
+  try{
+    const r=await window.pywebview.api.list_presets();
+    if(!r.ok)return;
+    presets=r.presets;
+    const d=$("preset");
+    d.innerHTML='<option value="">— none —</option>';
+    presets.forEach(p=>{
+      const o=document.createElement("option");
+      o.value=p.name;o.textContent=p.builtin?p.name+" (built-in)":p.name;
+      d.appendChild(o);
+    });
+    if(sel)d.value=sel;
+  }catch(e){}
+}
+$("preset").onchange=()=>{
+  const p=presets.find(x=>x.name===$("preset").value);
+  if(p)applySettings(p.settings);
+};
+$("presetSave").onclick=async ()=>{
+  const name=prompt("Preset name:");
+  if(!name)return;
+  const r=await window.pywebview.api.save_preset(name,currentSettings());
+  if(r.ok){presets=r.presets;await loadPresets(name);}
+  else flashErr(r.error||"Couldn't save preset");
+};
+$("presetDel").onclick=async ()=>{
+  const name=$("preset").value;
+  if(!name)return;
+  const r=await window.pywebview.api.delete_preset(name);
+  if(r.ok){presets=r.presets;await loadPresets("");}
+  else flashErr(r.error||"Couldn't delete preset");
+};
+
+// ---- progress (called from Python via evaluate_js) ----
+window.__stingerProgress=(stage,pct)=>{
+  const fill=$("progFill"), label=$("progLabel");
+  if(stage==="render"){
+    // reserve the last 10% of the bar for encoding
+    const shown=Math.round(pct*0.9);
+    fill.style.width=shown+"%";
+    label.textContent=`Rendering frames… ${pct}%`;
+  }else if(stage==="encode"){
+    fill.style.width=(90+Math.round(pct*0.1))+"%";
+    label.textContent= pct>=100 ? "Finishing up…" : "Encoding…";
+  }
+};
+window.__stingerBatch=(idx,total,styleName,stage,pct)=>{
+  const overall=Math.round(((idx-1)+pct/100)/total*100);
+  $("progFill").style.width=overall+"%";
+  $("progLabel").textContent=
+    `Style ${idx}/${total} (${styleName}) — ${stage==="encode"?"encoding":"rendering"} ${pct}%`;
+};
+
+// ---- payload ----
+function basePayload(){
+  const s=currentSettings();
+  return {
+    emotes:emotes.map(e=>({name:e.name,dataUrl:e.dataUrl})),
+    audio:audioFile,
+    logo:logo?{name:logo.name,dataUrl:logo.dataUrl}:null,
+    logoSize:s.logoSize, logoAnchor:s.logoAnchor, logoDx:s.logoDx,
+    logoDy:s.logoDy, logoIn:s.logoIn, logoOut:s.logoOut,
+    style:s.style, res:s.res, fps:s.fps, duration:s.duration, hold:s.hold,
+    density:s.density, emotePx:s.emotePx, inFrac:s.inFrac, easing:s.easing,
+    direction:s.direction, quality:s.quality, outline:s.outline,
+    outlineColor:s.outlineColor, shadow:s.shadow, fmt:s.fmt,
+    seed:s.seed===""?null:+s.seed,
+  };
+}
+function startWork(btn,label){
+  btn.disabled=true;btn.classList.add("working");
+  btn.innerHTML=`<span class="spin"></span>${label}`;
+  $("gen").disabled=true;$("genAll").disabled=true;
+  $("result").classList.remove("show","err");
+  $("progFill").style.width="0%";
+  $("progLabel").textContent="Preparing…";
+  $("progress").classList.add("show");
+}
+function endWork(){
+  const g=$("gen");
+  g.disabled=false;g.classList.remove("working");
+  g.textContent="Generate "+FMT_LABEL[$("fmt").value];
+  $("genAll").disabled=false;$("genAll").textContent="Render all styles";
+}
+
+// ---- generate ----
+$("gen").onclick=async ()=>{
+  if(!emotes.length){flashErr("Add at least one emote first.");return;}
+  startWork($("gen"),"Working…");
+  try{
+    const r=await window.pywebview.api.generate(basePayload());
+    if(r.ok){
+      $("progFill").style.width="100%";
+      $("progLabel").textContent="Done";
+      lastOut=r.out; lastFmt=r.format||"webm";
+      $("seed").value=r.seed;              // show the seed that was actually used
+      $("resTitle").textContent=FMT_LABEL[lastFmt]+" ready";
+      $("resMeta").innerHTML=
+        `${r.count} emotes · ${r.frames} frames · style ${r.direction?style+" ("+r.direction+")":style}<br>`+
+        `seed <b>${r.seed}</b><br>OBS transition point: <b>${r.transition_ms} ms</b>`;
+      $("errText").style.display="none";
+      $("saveBtn").style.display="inline-block";
+      $("saveBtn").textContent="Save file…";
+      $("saveBtn").dataset.mode="one";
+      $("result").classList.add("show");$("result").classList.remove("err");
+      $("obsNote").style.display="block";
+      setTimeout(()=>$("progress").classList.remove("show"),800);
+    }else{
+      $("progress").classList.remove("show");
+      flashErr(r.error||"Render failed", r.trace);
+    }
+  }catch(e){$("progress").classList.remove("show");flashErr("Bridge error: "+e.message);}
+  finally{endWork();}
+};
+
+$("genAll").onclick=async ()=>{
+  if(!emotes.length){flashErr("Add at least one emote first.");return;}
+  startWork($("genAll"),"Rendering…");
+  try{
+    const r=await window.pywebview.api.generate_all(basePayload());
+    if(r.ok){
+      $("progFill").style.width="100%";
+      $("progLabel").textContent="Done";
+      lastFmt=r.format||"webm";
+      $("seed").value=r.seed;
+      $("resTitle").textContent=`${r.count} styles rendered`;
+      $("resMeta").innerHTML=
+        `seed <b>${r.seed}</b> · format ${FMT_LABEL[lastFmt]}<br>`+
+        r.files.map(f=>`stinger_${f.style}${EXT[lastFmt]} — <b>${f.transition_ms} ms</b>`).join("<br>");
+      $("errText").style.display="none";
+      $("saveBtn").style.display="inline-block";
+      $("saveBtn").textContent="Save all…";
+      $("saveBtn").dataset.mode="all";
+      $("result").classList.add("show");$("result").classList.remove("err");
+      $("obsNote").style.display="block";
+      setTimeout(()=>$("progress").classList.remove("show"),800);
+    }else{
+      $("progress").classList.remove("show");
+      flashErr(r.error||"Batch render failed", r.trace);
+    }
+  }catch(e){$("progress").classList.remove("show");flashErr("Bridge error: "+e.message);}
+  finally{endWork();}
+};
+
+function flashErr(msg,trace){
+  $("resTitle").textContent="Couldn't render";
+  $("resMeta").textContent=msg;
+  $("saveBtn").style.display="none";
+  if(trace){$("errText").style.display="block";$("errText").textContent=trace;}
+  else $("errText").style.display="none";
+  $("result").classList.add("show","err");
+}
+$("saveBtn").onclick=async ()=>{
+  if($("saveBtn").dataset.mode==="all"){
+    const r=await window.pywebview.api.save_all();
+    if(r.ok){$("resMeta").innerHTML+=`<br>Saved <b>${r.saved}</b> files to: <b>${r.folder}</b>`;}
+    else if(!r.cancelled){flashErr("Save failed: "+(r.error||"unknown"));}
+    return;
+  }
+  if(!lastOut)return;
+  const r=await window.pywebview.api.save_as(lastOut,lastFmt);
+  if(r.ok){$("resMeta").innerHTML+=`<br>Saved to: <b>${r.dest}</b>`;}
+  else if(!r.cancelled){flashErr("Save failed: "+(r.error||"unknown"));}
+};
+
+// init
+syncDirection();buildSprites();updateTpt();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

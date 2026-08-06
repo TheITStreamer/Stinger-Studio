@@ -1,0 +1,32 @@
+# Bundled ffmpeg — build.bat downloads this (~80MB zip, 195MB extracted).
+# Not source; a fresh clone fetches it automatically.
+bin/
+
+# PyInstaller output and scratch
+build/
+dist/
+*.spec.bak
+build_log.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Private working notes — not for the public repo
+UPGRADE_INSTRUCTIONS.md
+
+# Local renders and test output
+*.webm
+*.mov
+*.zip
+presets.json
