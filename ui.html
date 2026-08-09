@@ -178,8 +178,12 @@
       <label>Style</label>
       <div class="styles" id="styles"></div>
       <div class="row hide" id="dirRow" style="margin-top:10px">
-        <label>Direction</label>
+        <label>Direction in</label>
         <select id="dir"></select>
+      </div>
+      <div class="row hide" id="dirOutRow">
+        <label>Direction out</label>
+        <select id="dirOut"></select>
       </div>
     </div>
 
@@ -313,12 +317,15 @@ const STYLES=["rain","burst","swipe","spiral","swarm",
               "rows","columns","downpour","zoom","wipe","shockwave","vortex",
               "popcorn","wave","shatter"];
 // styles that take a direction, and the default that reproduces the original
-// motion — mirrors engine.DIRECTIONAL
-const DIRECTIONAL={rain:"down",swipe:"right",wipe:"right",rows:"right",columns:"down",
-                   downpour:"down",wave:"right"};
-const DIR_OPTS={rows:["left","right"],columns:["up","down"],downpour:["down","up"],
+// motion. Mirrors engine.DIRECTIONAL. rows and columns are left out: their
+// lines always come from both sides, so the option changed nothing you could see.
+const DIRECTIONAL={rain:"down",swipe:"right",wipe:"right",downpour:"down",wave:"right"};
+const DIR_OPTS={downpour:["down","up"],
                 rain:["down","up","left","right"],swipe:["right","left","up","down"],
                 wipe:["right","left","up","down"],wave:["right","left","up","down"]};
+// these four can leave a different way than they arrived
+const DIR_OUT_STYLES=["rain","swipe","wipe","wave"];
+const OPPOSITE={left:"right",right:"left",up:"down",down:"up"};
 const FPS_STEPS=[24,30,48,60,90,120];
 const EXT={webm:".webm",mov:".mov",png:".zip"};
 const FMT_LABEL={webm:"WebM",mov:"MOV",png:"PNG sequence"};
@@ -558,14 +565,26 @@ STYLES.forEach(s=>{
 function syncDirection(){
   const opts=DIR_OPTS[style];
   const row=$("dirRow"), sel=$("dir");
-  if(!opts){row.classList.add("hide");return}
+  const outRow=$("dirOutRow"), outSel=$("dirOut");
+  if(!opts){row.classList.add("hide");outRow.classList.add("hide");return}
   row.classList.remove("hide");
   const prev=sel.value;
   sel.innerHTML="";
   opts.forEach(o=>{const op=document.createElement("option");op.value=o;op.textContent=o;sel.appendChild(op)});
   sel.value=opts.includes(prev)?prev:DIRECTIONAL[style];
+
+  if(!DIR_OUT_STYLES.includes(style)){outRow.classList.add("hide");outSel.value="";return}
+  outRow.classList.remove("hide");
+  const prevOut=outSel.value;
+  outSel.innerHTML="";
+  const back=document.createElement("option");
+  back.value=""; back.textContent="back the way they came";
+  outSel.appendChild(back);
+  opts.forEach(o=>{const op=document.createElement("option");op.value=o;op.textContent=o;outSel.appendChild(op)});
+  outSel.value=opts.includes(prevOut)?prevOut:"";
 }
 $("dir").onchange=()=>buildSprites();
+$("dirOut").onchange=()=>draw();
 
 // ---- sliders ----
 function fmt(id,v){
@@ -874,7 +893,12 @@ function draw(){
   const cov=coverage(tNorm,hold,inFrac);
   const downStart=windows(hold,inFrac)[2];
   const ease=EASE[$("easing").value]||easeIO;
-  const dir=DIR_OPTS[style]?$("dir").value:null;
+  let dir=DIR_OPTS[style]?$("dir").value:null;
+  // past the peak the four travelling styles can head off somewhere else. The
+  // far point sits opposite the way the user wants them to go, so they travel
+  // toward it. Coverage is 1 at the switch, so it never shows on screen.
+  const dirOut=DIR_OUT_STYLES.includes(style)?$("dirOut").value:"";
+  if(dirOut&&tNorm>downStart)dir=OPPOSITE[dirOut];
   const tMs=tNorm*(+$("dur").value)*1000;
   // work in render coordinates, scale to the canvas at blit time
   const W=renderW, H=renderH, cx=W/2, cy=H/2, diag=Math.hypot(W,H);
@@ -1083,6 +1107,7 @@ function currentSettings(){
     density:+$("dens").value, emotePx:+$("size").value, res:$("res").value,
     fps:curFps(), quality:+$("quality").value, inFrac:+$("infrac").value,
     easing:$("easing").value, direction:DIR_OPTS[style]?$("dir").value:null,
+    directionOut:DIR_OUT_STYLES.includes(style)?($("dirOut").value||null):null,
     outline:+$("outline").value, outlineColor:$("outlineColor").value,
     shadow:$("shadow").checked, fmt:$("fmt").value, seed:$("seed").value,
     volume:+$("vol").value, fadeOut:$("fadeOut").checked,
@@ -1116,6 +1141,8 @@ function applySettings(s){
   $("shadow").checked=!!s.shadow;
   syncDirection();
   if(s.direction&&DIR_OPTS[style]&&DIR_OPTS[style].includes(s.direction))$("dir").value=s.direction;
+  $("dirOut").value=(s.directionOut&&DIR_OUT_STYLES.includes(style)
+                     &&DIR_OPTS[style].includes(s.directionOut))?s.directionOut:"";
   ["dur","fps","size","dens","vary","hold","infrac","quality","outline"].forEach(id=>{
     $(id+"V").textContent=fmt(id,$(id).value)});
   $("gen").textContent="Generate "+FMT_LABEL[$("fmt").value];
@@ -1216,7 +1243,8 @@ function basePayload(){
     logoDy:s.logoDy, logoIn:s.logoIn, logoOut:s.logoOut,
     style:s.style, res:s.res, fps:s.fps, duration:s.duration, hold:s.hold,
     density:s.density, emotePx:s.emotePx, inFrac:s.inFrac, easing:s.easing,
-    direction:s.direction, quality:s.quality, outline:s.outline,
+    direction:s.direction, directionOut:s.directionOut,
+    quality:s.quality, outline:s.outline,
     outlineColor:s.outlineColor, shadow:s.shadow, fmt:s.fmt,
     seed:s.seed===""?null:+s.seed,
   };

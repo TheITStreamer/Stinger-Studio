@@ -53,9 +53,18 @@ DIRECTIONS = ["left", "right", "up", "down"]
 
 # Styles that respond to the direction option, and the default that reproduces
 # the original motion. Direction always means "which way the images travel".
+# rows and columns are left out on purpose: their lines always come from both
+# sides, so the option only swapped which line leads and nothing looked
+# different. The CLI still accepts it for them, it just isn't worth a control.
 DIRECTIONAL = {"rain": "down", "swipe": "right", "wipe": "right",
-               "rows": "right", "columns": "down", "downpour": "down",
-               "wave": "right"}
+               "downpour": "down", "wave": "right"}
+
+# Styles that can leave in a different direction than they arrived. They all
+# travel between a far point and their grid home, so the far point can simply
+# be worked out from a second direction on the way out.
+DIR_OUT_STYLES = ("rain", "swipe", "wipe", "wave")
+
+OPPOSITE = {"left": "right", "right": "left", "up": "down", "down": "up"}
 
 EASINGS = ["smooth", "linear", "overshoot", "bounce"]
 
@@ -730,6 +739,15 @@ def render_frame(t, sprites, cfg, logo=None):
     canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     cov = coverage_curve(t, hold, in_frac)
     _, up_end, down_start = timing_windows(hold, in_frac)
+
+    # Once past the peak, the four travelling styles can head off somewhere
+    # else. direction_out is where the user wants them to fly off to, and the
+    # far point sits the opposite way, so the sprite travels toward it.
+    # Coverage is 1 at the switch, every sprite is sitting on its home square,
+    # so swapping the far point there never shows on screen.
+    if (style in DIR_OUT_STYLES and t > down_start
+            and cfg.get("direction_out") in OPPOSITE):
+        direction = OPPOSITE[cfg["direction_out"]]
     cx, cy = w / 2.0, h / 2.0
     diag = math.hypot(w, h)
 
@@ -1036,7 +1054,8 @@ def ffmpeg_cmd(fmt, w, h, fps, out, quality, audio,
 # --------------------------------------------------------------------------
 def build(images, out, style="rain", width=1920, height=1080, fps=30,
           duration=1.2, hold=0.08, density=2.0, emote_px=160, seed=None,
-          bg_test=False, in_frac=0.5, direction=None, easing="smooth",
+          bg_test=False, in_frac=0.5, direction=None, direction_out=None,
+          easing="smooth",
           quality=28, audio=None, fmt="webm", outline=0,
           outline_color="#000000", shadow=False,
           logo=None, logo_size=22.0, logo_anchor="mc", logo_dx=0.0,
@@ -1074,6 +1093,9 @@ def build(images, out, style="rain", width=1920, height=1080, fps=30,
         "style": style, "width": width, "height": height,
         "hold": hold, "in_frac": in_frac,
         "direction": resolve_direction(style, direction),
+        "direction_out": (direction_out
+                          if (style in DIR_OUT_STYLES
+                              and direction_out in DIRECTIONS) else None),
         "easing": easing if easing in EASE_FN else "smooth",
         "duration_ms": duration * 1000.0,
         "n_frames": n_frames, "bg_test": bg_test,
@@ -1214,7 +1236,11 @@ def main():
     ap.add_argument("--density", type=float, default=2.0, help="coverage multiplier; higher = more images / fuller cover")
     ap.add_argument("--emote-px", type=int, default=160, help="image size in px (longest side)")
     ap.add_argument("--direction", choices=DIRECTIONS, default=None,
-                    help="travel direction for rain/swipe/wipe/rows/columns/downpour")
+                    help="travel direction for rain/swipe/wipe/wave/downpour")
+    ap.add_argument("--direction-out", choices=DIRECTIONS, default=None,
+                    dest="direction_out",
+                    help="where rain/swipe/wipe/wave fly off to on the way out "
+                         "(default: back the way they came)")
     ap.add_argument("--easing", choices=EASINGS, default="smooth")
     ap.add_argument("--quality", type=int, default=28, help="VP9 crf, 18 (best) - 40 (smallest)")
     ap.add_argument("--audio", default=None, help="optional audio file to mux in")
@@ -1271,7 +1297,8 @@ def main():
         width=args.width, height=args.height, fps=args.fps,
         duration=args.duration, hold=args.hold, density=args.density,
         emote_px=args.emote_px, seed=args.seed, bg_test=args.bg_test,
-        in_frac=args.in_frac, direction=args.direction, easing=args.easing,
+        in_frac=args.in_frac, direction=args.direction,
+        direction_out=args.direction_out, easing=args.easing,
         quality=args.quality, audio=args.audio, fmt=args.fmt,
         outline=args.outline, outline_color=args.outline_color,
         shadow=args.shadow,

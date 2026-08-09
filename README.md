@@ -23,8 +23,9 @@ prompts and if it was good, I went with it.
 <!-- SCREENSHOT: the Images box with a few thumbnails loaded -->
 
 - **Fifteen styles** - rain, burst, swipe, spiral, swarm, rows, columns, downpour,
-  zoom, wipe, shockwave, vortex, popcorn, wave and shatter. Seven of them can be aimed
-  left, right, up or down.
+  zoom, wipe, shockwave, vortex, popcorn, wave and shatter. Rain, swipe, wipe, wave
+  and downpour can be aimed left, right, up or down. The first four also take a
+  separate direction out, so they can come in from the left and leave downward.
 <!-- SCREENSHOT: the style buttons -->
 
 - **Live preview** - runs the same maths as the real render, so what you see is what
@@ -118,7 +119,8 @@ python app.py
 The render engine also runs on its own without the window:
 
 ```
-python engine.py --images a.png b.png --style wave --out stinger.webm
+python engine.py --images a.png b.png --style wave --out stinger.webm \
+    --direction right --direction-out down
 ```
 
 `python engine.py --help` lists every option.

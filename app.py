@@ -303,6 +303,7 @@ class Api:
             bg_test=False,
             in_frac=float(payload.get("inFrac", 0.5)),
             direction=payload.get("direction") or None,
+            direction_out=payload.get("directionOut") or None,
             easing=payload.get("easing", "smooth"),
             quality=int(payload.get("quality", 28)),
             audio=audio_path,
