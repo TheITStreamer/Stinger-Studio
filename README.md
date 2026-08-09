@@ -3,8 +3,7 @@
 Make OBS stinger transitions out of your own images. Drop in emotes, logos, stickers
 or anything else, pick a style, hit Generate. Out comes a transparent WebM that goes
 straight into OBS. Everything runs locally on your PC.
-
-<!-- SCREENSHOT: the main window with a transition mid preview -->
+<img width="1166" height="813" alt="image" src="https://github.com/user-attachments/assets/ad5a0a80-f1a5-4da9-8a15-ad074a2ca875" />
 
 ## A.I Disclaimer
 
@@ -20,29 +19,23 @@ prompts and if it was good, I went with it.
 
 - **Any images** - drop in PNGs, GIFs or animated WebP. Transparent backgrounds look
   best. Animated ones keep playing while they fly across the screen.
-<!-- SCREENSHOT: the Images box with a few thumbnails loaded -->
 
 - **Fifteen styles** - rain, burst, swipe, spiral, swarm, rows, columns, downpour,
   zoom, wipe, shockwave, vortex, popcorn, wave and shatter. Rain, swipe, wipe, wave
   and downpour can be aimed left, right, up or down. The first four also take a
   separate direction out, so they can come in from the left and leave downward.
-<!-- SCREENSHOT: the style buttons -->
 
 - **Live preview** - runs the same maths as the real render, so what you see is what
   you get. Scrub through it or let it loop.
-<!-- SCREENSHOT: the preview area with the play bar and transition point readout -->
 
 - **Size and amount** - sliders for how big the images are, how many of them, how long
   the clip runs, and how random the sizes should be.
-<!-- SCREENSHOT: the Adjust group -->
 
 - **Logo** - drop a logo that lands on top at the moment the screen is covered, then
   leaves with everything else. Ten entry animations and a nine point placement grid.
-<!-- SCREENSHOT: the Logo group with a logo loaded -->
 
 - **Sound** - add an mp3 or wav with volume and fade out. It plays along with the
   preview so you can line it up before you render.
-<!-- SCREENSHOT: the Sound row -->
 
 - **Weighting** - click an image thumbnail to make it show up two or three times as
   often as the others.
@@ -52,11 +45,9 @@ prompts and if it was good, I went with it.
 - **Update check** - the app looks at the Releases page when it starts and puts a
   banner across the top when there is a newer version. Hit Not now and it stops asking
   about that one.
-<!-- SCREENSHOT: the update banner across the top of the window -->
 
 - **Render all styles** - renders your settings once per style so you can pick the one
   you like, then saves all fifteen to a folder.
-<!-- SCREENSHOT: the result panel after a batch render -->
 
 The app tells you the transition point in milliseconds, which is the one number OBS
 needs. There is a Copy button next to it.
@@ -86,8 +77,6 @@ The exe icon comes from `S.png`. Swap that file for your own and build again, or
 4. Click **Generate**, then **Save file...**.
 5. In OBS: **Scene Transitions > + > Stinger**, pick the file, and paste in the
    transition point the app showed you.
-
-<!-- SCREENSHOT: the OBS stinger settings with the transition point filled in -->
 
 ## Good to know
 
