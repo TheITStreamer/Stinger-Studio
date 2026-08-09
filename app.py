@@ -16,11 +16,14 @@ import base64
 import json
 import multiprocessing
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import traceback
+import urllib.request
+import webbrowser
 
 # CRITICAL on Windows / frozen exe: must run before anything spawns a process.
 # Without this, each render worker re-launches the whole app window (fork bomb).
@@ -29,6 +32,30 @@ multiprocessing.freeze_support()
 import webview
 
 import engine
+
+# Bump this when you cut a release. The app compares it against the newest tag
+# on the Releases page and shows a banner when there is a newer one.
+APP_VERSION = "1.0.0"
+
+REPO = "TheITStreamer/Stinger-Studio"
+RELEASES_API = f"https://api.github.com/repos/{REPO}/releases/latest"
+RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
+# open_url only ever opens links on this host, so a bad reply from the API
+# can't be used to send someone somewhere else
+ALLOWED_URL_PREFIX = f"https://github.com/{REPO}"
+
+
+def parse_version(s):
+    """'v1.2.3' -> (1, 2, 3). Stops at the first part that isn't a number, so
+    tags like 1.2.0-beta compare as 1.2.0."""
+    s = (s or "").strip().lstrip("vV")
+    parts = []
+    for chunk in re.split(r"[.\-+_]", s):
+        if chunk.isdigit():
+            parts.append(int(chunk))
+        else:
+            break
+    return tuple(parts) or (0,)
 
 
 def resource_path(rel):
@@ -127,6 +154,62 @@ class Api:
         self.assetdir = os.path.join(self.workdir, "emotes")
         os.makedirs(self.assetdir, exist_ok=True)
         engine.FFMPEG = locate_ffmpeg()
+
+    # ---------------- version / updates ----------------
+    def version(self):
+        return {"version": APP_VERSION, "releases": RELEASES_PAGE}
+
+    def check_update(self):
+        """Ask GitHub for the newest release and say whether it beats this one.
+
+        Never raises and never blocks the UI for long: a missing network, a
+        rate limit or a repo with no releases yet all just come back as
+        {"ok": False} and the banner stays hidden."""
+        try:
+            req = urllib.request.Request(RELEASES_API, headers={
+                "User-Agent": f"StingerStudio/{APP_VERSION}",
+                "Accept": "application/vnd.github+json",
+            })
+            with urllib.request.urlopen(req, timeout=6) as r:
+                data = json.load(r)
+            tag = (data.get("tag_name") or "").strip()
+            if not tag:
+                return {"ok": True, "update": False, "current": APP_VERSION}
+            newer = parse_version(tag) > parse_version(APP_VERSION)
+            url = data.get("html_url") or RELEASES_PAGE
+            if not url.startswith(ALLOWED_URL_PREFIX):
+                url = RELEASES_PAGE
+            return {
+                "ok": True,
+                "update": bool(newer),
+                "current": APP_VERSION,
+                "latest": tag.lstrip("vV"),
+                "tag": tag,
+                "url": url,
+                "skipped": self._read_settings().get("skipUpdate") == tag,
+            }
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def skip_update(self, tag):
+        """Remember that this version was dismissed so it stops nagging."""
+        try:
+            data = self._read_settings()
+            data["skipUpdate"] = tag
+            self._write_settings(data)
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def open_url(self, url):
+        """Open a link in the real browser, not inside the app window."""
+        try:
+            if not str(url).startswith(ALLOWED_URL_PREFIX):
+                return {"ok": False, "error": "That link is not allowed."}
+            webbrowser.open(url)
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     # ---------------- capability probes ----------------
     def styles(self):
@@ -490,7 +573,7 @@ def main():
     global window
     api = Api()
     window = webview.create_window(
-        "Stinger Studio",
+        f"Stinger Studio {APP_VERSION}",
         url=resource_path("ui.html"),
         js_api=api,
         width=1180, height=820,

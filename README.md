@@ -48,6 +48,11 @@ prompts and if it was good, I went with it.
 
 - **Presets** - save every setting under a name. Six come built in.
 
+- **Update check** - the app looks at the Releases page when it starts and puts a
+  banner across the top when there is a newer version. Hit Not now and it stops asking
+  about that one.
+<!-- SCREENSHOT: the update banner across the top of the window -->
+
 - **Render all styles** - renders your settings once per style so you can pick the one
   you like, then saves all fifteen to a folder.
 <!-- SCREENSHOT: the result panel after a batch render -->
@@ -57,17 +62,17 @@ needs. There is a Copy button next to it.
 
 ## Install
 
-You only need to do this once, and only on the machine that builds the app. Anyone you
-hand the exe to installs nothing.
+1. Download **StingerStudio.exe** from [Releases](https://github.com/TheITStreamer/Stinger-Studio/releases/latest).
+2. Run it. Windows may warn about an unknown publisher, this is normal for a small
+   unsigned app.
+3. The app checks for new versions on startup and shows a banner when one is out.
 
-1. Install Python 3 from python.org. On the first installer screen, tick
-   **Add python.exe to PATH**.
-2. Download this repo and put everything in one folder.
-3. Double click **build.bat**. It installs what it needs, downloads ffmpeg, and builds
-   the app.
+### Building it yourself
 
-You end up with `dist\StingerStudio.exe`. That single file is the whole app, ffmpeg
-included.
+You only need this if you would rather build from source. Install Python 3 from
+python.org, tick **Add python.exe to PATH** on the first installer screen, then double
+click **build.bat**. It installs what it needs, downloads ffmpeg and builds the app.
+You end up with `dist\StingerStudio.exe`, which is the whole app with ffmpeg inside it.
 
 ## Use it
 

@@ -20,15 +20,18 @@
     color:var(--txt);
     font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
     overflow:hidden;
+    /* column layout so the update banner can push the rest down without
+       anything spilling off the bottom of the window */
+    display:flex;flex-direction:column;
   }
-  header{padding:18px 26px 14px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:14px}
+  header{padding:18px 26px 14px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:14px;flex:none}
   h1{margin:0;font-size:19px;letter-spacing:-.02em;font-weight:700}
   h1 .dot{color:var(--acc)}
   .sub{color:var(--dim);font-size:12px}
   .status{margin-left:auto;font-size:11px;font-family:var(--mono);padding:4px 10px;border-radius:6px;background:var(--panel)}
   .status.ok{color:var(--good)} .status.bad{color:var(--bad)}
 
-  .wrap{display:grid;grid-template-columns:330px 1fr;height:calc(100% - 53px)}
+  .wrap{display:grid;grid-template-columns:330px 1fr;flex:1;min-height:0}
   .controls{padding:20px;border-right:1px solid var(--line);overflow-y:auto}
   .stage{padding:20px;display:flex;flex-direction:column;gap:14px;overflow-y:auto}
 
@@ -108,6 +111,21 @@
   .result.err{border-color:var(--bad)} .result.err h3{color:var(--bad)}
   .result .errtext{font-family:var(--mono);font-size:11px;color:var(--dim);white-space:pre-wrap;max-height:90px;overflow:auto;margin-top:6px}
 
+  .updatebar{display:none;align-items:center;gap:12px;padding:9px 26px;
+    background:linear-gradient(90deg,#1f2b3d,#24344a);border-bottom:1px solid var(--line);
+    font-size:12px;color:var(--txt)}
+  .updatebar.show{display:flex}
+  .updatebar .tag{font-family:var(--mono);font-size:10px;background:var(--acc2);color:#04212f;
+    padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.04em}
+  .updatebar .grow{flex:1;color:var(--dim)}
+  .updatebar .get{background:var(--acc2);border:none;color:#04212f;font-weight:700;
+    padding:6px 13px;border-radius:7px;cursor:pointer;font-size:12px}
+  .updatebar .get:hover{filter:brightness(1.08)}
+  .updatebar .later{background:none;border:1px solid var(--line);color:var(--dim);
+    padding:6px 11px;border-radius:7px;cursor:pointer;font-size:12px}
+  .updatebar .later:hover{color:var(--txt);border-color:var(--acc2)}
+  .ver{font-size:11px;color:var(--dim);font-family:var(--mono)}
+
   .note{font-size:11px;color:var(--dim);line-height:1.6}
   .note b{color:var(--txt)}
   .empty{color:var(--dim);font-size:12px;text-align:center}
@@ -116,9 +134,18 @@
 </style>
 </head>
 <body>
+<div class="updatebar" id="updateBar">
+  <span class="tag" id="updateTag">NEW</span>
+  <span><b id="updateText">A new version is out.</b></span>
+  <span class="grow" id="updateSub">You are on 1.0.0.</span>
+  <button class="get" id="updateGet">Download</button>
+  <button class="later" id="updateLater">Not now</button>
+</div>
+
 <header>
   <h1>Stinger Studio<span class="dot">.</span></h1>
   <span class="sub">OBS stinger transitions from your images</span>
+  <span class="ver" id="ver"></span>
   <span class="status" id="status">checking…</span>
 </header>
 
@@ -323,7 +350,42 @@ window.addEventListener('pywebviewready', async ()=>{
     else{s.textContent="ffmpeg not found";s.classList.add("bad");}
   }catch(e){$("status").textContent="bridge error";$("status").classList.add("bad");}
   loadPresets();
+  showVersion();
+  checkUpdate();
 });
+
+// ---- version + update banner ----
+let updateInfo=null;
+async function showVersion(){
+  try{
+    const v=await window.pywebview.api.version();
+    if(v&&v.version)$("ver").textContent="v"+v.version;
+  }catch(e){}
+}
+// Asks GitHub for the newest release once at startup. If anything goes wrong,
+// no network, no releases yet, rate limited, the banner just stays hidden.
+async function checkUpdate(){
+  try{
+    const r=await window.pywebview.api.check_update();
+    if(!r||!r.ok||!r.update||r.skipped)return;
+    updateInfo=r;
+    $("updateTag").textContent="v"+r.latest;
+    $("updateText").textContent="Version "+r.latest+" is out.";
+    $("updateSub").textContent="You are on "+r.current+".";
+    $("updateBar").classList.add("show");
+  }catch(e){}
+}
+$("updateGet").onclick=async ()=>{
+  if(!updateInfo)return;
+  const r=await window.pywebview.api.open_url(updateInfo.url);
+  if(!r||!r.ok)$("updateSub").textContent="Couldn't open the browser. Go to the repo Releases page.";
+};
+$("updateLater").onclick=async ()=>{
+  $("updateBar").classList.remove("show");
+  if(updateInfo&&updateInfo.tag){
+    try{ await window.pywebview.api.skip_update(updateInfo.tag); }catch(e){}
+  }
+};
 
 // ---- file loading ----
 const drop=$("drop"), fileInput=$("file");
