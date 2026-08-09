@@ -42,7 +42,10 @@
   .thumb{position:relative;width:44px;height:44px;border-radius:7px;overflow:hidden;
     background:repeating-conic-gradient(#222 0 25%,#2c2c2c 0 50%) 0/12px 12px;border:1px solid var(--line)}
   .thumb img{width:100%;height:100%;object-fit:contain}
+  .thumb{cursor:pointer}
   .thumb .x{position:absolute;top:-5px;right:-5px;width:17px;height:17px;border-radius:50%;background:var(--acc);color:#fff;border:none;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center}
+  .thumb .wbadge{position:absolute;left:0;bottom:0;background:var(--acc2);color:#04212f;
+    font-family:var(--mono);font-size:9px;font-weight:700;padding:1px 3px;border-radius:0 5px 0 6px}
 
   .styles{display:grid;grid-template-columns:1fr 1fr;gap:7px}
   .styles button{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:9px;border-radius:8px;cursor:pointer;font-size:12px;transition:.12s;text-transform:capitalize}
@@ -115,7 +118,7 @@
 <body>
 <header>
   <h1>Stinger Studio<span class="dot">.</span></h1>
-  <span class="sub">OBS emote transitions</span>
+  <span class="sub">OBS stinger transitions from your images</span>
   <span class="status" id="status">checking…</span>
 </header>
 
@@ -133,12 +136,15 @@
     </div>
 
     <div class="group">
-      <label>Emotes</label>
+      <label>Images</label>
       <div class="drop" id="drop">
         <p><b>Drop images</b> or click<br>PNG, GIF and animated WebP work</p>
         <input type="file" id="file" accept="image/*" multiple hidden>
       </div>
       <div class="thumbs" id="thumbs"></div>
+      <div class="note" id="weightNote" style="display:none;margin-top:7px">
+        Click an image to make it show up more often.
+      </div>
     </div>
 
     <div class="group">
@@ -152,8 +158,9 @@
 
     <div class="group">
       <label>Adjust</label>
-      <div class="row"><label>Emote size</label><input type="range" id="size" min="80" max="500" step="10" value="160"><span class="val" id="sizeV">160px</span></div>
+      <div class="row"><label>Image size</label><input type="range" id="size" min="80" max="500" step="10" value="160"><span class="val" id="sizeV">160px</span></div>
       <div class="row"><label>Amount</label><input type="range" id="dens" min="1" max="3.5" step="0.1" value="2.0"><span class="val" id="densV">2.0×</span></div>
+      <div class="row"><label>Size variety</label><input type="range" id="vary" min="0" max="60" step="1" value="0"><span class="val" id="varyV">off</span></div>
       <div class="row"><label>Duration</label><input type="range" id="dur" min="0.6" max="5" step="0.1" value="1.2"><span class="val" id="durV">1.2s</span></div>
       <div class="row"><label>Hold</label><input type="range" id="hold" min="0" max="0.5" step="0.02" value="0.08"><span class="val" id="holdV">0.08</span></div>
       <div class="row"><label>Transition point</label><input type="range" id="infrac" min="0.2" max="0.8" step="0.01" value="0.5"><span class="val" id="infracV">50%</span></div>
@@ -187,7 +194,7 @@
     </div>
 
     <div class="group">
-      <label>Emote effects</label>
+      <label>Image effects</label>
       <div class="row"><label>Outline</label><input type="range" id="outline" min="0" max="4" step="1" value="0"><span class="val" id="outlineV">off</span></div>
       <div class="row"><label>Outline colour</label><input type="color" id="outlineColor" value="#000000"></div>
       <div class="row"><label>Drop shadow</label><input type="checkbox" id="shadow"></div>
@@ -199,6 +206,7 @@
         <select id="res">
           <option value="1920x1080">1920×1080</option>
           <option value="2560x1440">2560×1440</option>
+          <option value="3840x2160">3840×2160 (4K)</option>
           <option value="1280x720">1280×720</option>
         </select>
       </div>
@@ -211,12 +219,17 @@
           <option value="png">PNG sequence</option>
         </select>
       </div>
+      <div class="hint" id="pngNote" style="display:none;margin:-6px 0 12px">
+        Sound is not included in a PNG sequence.
+      </div>
       <div class="filerow">
         <button class="mini" id="soundPick">Sound…</button>
         <span class="filename" id="soundName">none</span>
         <button class="mini danger" id="soundClear">×</button>
         <input type="file" id="soundFile" accept="audio/*" hidden>
       </div>
+      <div class="row"><label>Volume</label><input type="range" id="vol" min="0" max="100" step="1" value="100"><span class="val" id="volV">100%</span></div>
+      <div class="row"><label>Fade out</label><input type="checkbox" id="fadeOut"></div>
       <div class="filerow">
         <input class="seedfield" id="seed" value="12345" inputmode="numeric">
         <button class="mini" id="reroll" title="Random seed">🎲</button>
@@ -235,12 +248,14 @@
       <button id="play">❚❚</button>
       <input type="range" id="scrub" min="0" max="100" value="0">
       <span class="tpoint">transition point: <b id="tpt">600 ms</b></span>
+      <button class="mini" id="copyTpt" title="Copy the number for OBS">Copy</button>
     </div>
 
     <div class="actions">
       <button class="gen" id="gen">Generate WebM</button>
       <button class="genalt" id="genAll">Render all styles</button>
     </div>
+    <div class="note" id="estimate"></div>
 
     <div class="progress" id="progress">
       <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
@@ -251,7 +266,11 @@
       <h3 id="resTitle">Done</h3>
       <div class="meta" id="resMeta"></div>
       <div class="errtext" id="errText" style="display:none"></div>
-      <button class="save" id="saveBtn" style="display:none">Save file…</button>
+      <div class="filerow" style="margin-top:12px;margin-bottom:0">
+        <button class="save" id="saveBtn" style="display:none;margin-top:0">Save file…</button>
+        <button class="mini" id="copyTpt2" style="display:none">Copy transition point</button>
+        <button class="mini" id="openFolder" style="display:none">Open folder</button>
+      </div>
     </div>
 
     <div class="note" id="obsNote" style="display:none">
@@ -264,13 +283,15 @@
 
 <script>
 const STYLES=["rain","burst","swipe","spiral","swarm",
-              "rows","columns","downpour","zoom","wipe","shockwave","vortex"];
+              "rows","columns","downpour","zoom","wipe","shockwave","vortex",
+              "popcorn","wave","shatter"];
 // styles that take a direction, and the default that reproduces the original
 // motion — mirrors engine.DIRECTIONAL
-const DIRECTIONAL={rain:"down",swipe:"right",wipe:"right",rows:"right",columns:"down",downpour:"down"};
+const DIRECTIONAL={rain:"down",swipe:"right",wipe:"right",rows:"right",columns:"down",
+                   downpour:"down",wave:"right"};
 const DIR_OPTS={rows:["left","right"],columns:["up","down"],downpour:["down","up"],
                 rain:["down","up","left","right"],swipe:["right","left","up","down"],
-                wipe:["right","left","up","down"]};
+                wipe:["right","left","up","down"],wave:["right","left","up","down"]};
 const FPS_STEPS=[24,30,48,60,90,120];
 const EXT={webm:".webm",mov:".mov",png:".zip"};
 const FMT_LABEL={webm:"WebM",mov:"MOV",png:"PNG sequence"};
@@ -285,8 +306,8 @@ const LOGO_MIN_HOLD=0.26;
 let emotes=[]; let style="rain";
 let logo=null, logoAnchor="mc";
 let playing=true, tNorm=0, lastTs=0;
-let lastOut=null, lastFmt="webm";
-let audioFile=null;
+let lastOut=null, lastFmt="webm", lastFolder=null, lastTptMs=0;
+let audioFile=null, previewAudio=null;
 let presets=[];
 
 const $=id=>document.getElementById(id);
@@ -338,6 +359,22 @@ async function decodeFrames(dataUrl,type){
   }catch(e){ return {frames:[still],durations:[0],total:0}; }
 }
 
+// Content hash, worked out once when the file is added. The render side keeps
+// files keyed by this hash, so a second Generate with the same images sends
+// nothing but a list of hashes across the bridge.
+async function sha256(text){
+  try{
+    const d=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(text));
+    return [...new Uint8Array(d)].map(b=>b.toString(16).padStart(2,"0")).join("");
+  }catch(e){
+    // no crypto.subtle (non-secure context): fall back to a cheap string hash
+    let h1=0x811c9dc5,h2=0x01000193;
+    for(let i=0;i<text.length;i++){h1=(h1^text.charCodeAt(i))>>>0;h1=(h1*16777619)>>>0;
+      h2=(h2+text.charCodeAt(i)*(i+1))>>>0;}
+    return "fb"+h1.toString(16)+h2.toString(16)+text.length.toString(16);
+  }
+}
+
 function addFiles(list){
   [...list].forEach(f=>{
     if(!f.type.startsWith("image/"))return;
@@ -346,7 +383,8 @@ function addFiles(list){
       const dataUrl=ev.target.result;
       const anim=await decodeFrames(dataUrl,f.type);
       const f0=anim.frames[0];
-      emotes.push({name:f.name,dataUrl,frames:anim.frames,durations:anim.durations,
+      emotes.push({name:f.name,dataUrl,hash:await sha256(dataUrl),weight:1,
+                   frames:anim.frames,durations:anim.durations,
                    total:anim.total,fx:null,fxKey:null,
                    nw:f0.width||f0.naturalWidth||1, nh:f0.height||f0.naturalHeight||1,
                    dims:{w:1,h:1}});
@@ -355,21 +393,36 @@ function addFiles(list){
     reader.readAsDataURL(f);
   });
 }
+// Built with real nodes rather than an HTML string: a file called
+// <img onerror=…>.png would otherwise be pasted straight into the page.
 function renderThumbs(){
-  const t=$("thumbs");t.innerHTML="";
+  const t=$("thumbs");
+  t.textContent="";
   emotes.forEach((e,i)=>{
-    const d=document.createElement("div");d.className="thumb";
-    d.innerHTML=`<img src="${e.dataUrl}"><button class="x" data-i="${i}">×</button>`;
+    const d=document.createElement("div");
+    d.className="thumb";
+    d.title=e.name+"  ("+(e.weight||1)+"× as often)";
+    const img=document.createElement("img");
+    img.src=e.dataUrl; img.alt="";
+    d.appendChild(img);
+    if((e.weight||1)>1){
+      const b=document.createElement("span");
+      b.className="wbadge"; b.textContent=(e.weight||1)+"×";
+      d.appendChild(b);
+    }
+    const x=document.createElement("button");
+    x.className="x"; x.textContent="×"; x.title="Remove";
+    x.onclick=ev=>{ev.stopPropagation();emotes.splice(i,1);renderThumbs();buildSprites();};
+    d.appendChild(x);
+    d.onclick=()=>{e.weight=((e.weight||1)%3)+1;renderThumbs();buildSprites();};
     t.appendChild(d);
   });
-  t.querySelectorAll(".x").forEach(b=>b.onclick=ev=>{
-    ev.stopPropagation();emotes.splice(+b.dataset.i,1);renderThumbs();buildSprites();
-  });
+  $("weightNote").style.display=emotes.length?"block":"none";
 }
 
-// ---- emote effects ----
-// The engine bakes outline/shadow into each emote once at load time, which
-// changes the emote's pixel dimensions. The preview does the same, at the same
+// ---- image effects ----
+// The engine bakes outline/shadow into each image once at load time, which
+// changes the image's pixel dimensions. The preview does the same, at the same
 // render-pixel size and with the same padding, so sprites end up the same size
 // on screen in both. Baking beats per-sprite shadowBlur at 60fps, too.
 function fxKey(){return `${+$("outline").value}|${$("outlineColor").value}|${$("shadow").checked?1:0}|${+$("size").value}`}
@@ -459,6 +512,7 @@ function fmt(id,v){
   if(id==="dens")return v+"×";
   if(id==="fps")return String(FPS_STEPS[+v]);
   if(id==="infrac")return Math.round(v*100)+"%";
+  if(id==="vary")return +v?v+"%":"off";
   if(id==="outline")return +v?v+"px":"off";
   if(id==="quality"){
     const q=+v;
@@ -466,27 +520,76 @@ function fmt(id,v){
   }
   return v;
 }
-["dur","fps","size","dens","hold","infrac","quality","outline"].forEach(id=>{
-  $(id).oninput=()=>{$(id+"V").textContent=fmt(id,$(id).value);buildSprites();updateTpt()};
+["dur","fps","size","dens","vary","hold","infrac","quality","outline"].forEach(id=>{
+  $(id).oninput=()=>{$(id+"V").textContent=fmt(id,$(id).value);
+    buildSprites();updateTpt();updateEstimate()};
 });
-$("res").onchange=()=>buildSprites();
+$("res").onchange=()=>{buildSprites();updateEstimate()};
 $("easing").onchange=()=>draw();
 $("outlineColor").oninput=()=>buildSprites();
 $("shadow").onchange=()=>buildSprites();
-$("fmt").onchange=()=>{$("gen").textContent="Generate "+FMT_LABEL[$("fmt").value]};
+$("fmt").onchange=()=>{$("gen").textContent="Generate "+FMT_LABEL[$("fmt").value];
+  updatePngNote();updateEstimate()};
 $("seed").oninput=()=>buildSprites();
 $("reroll").onclick=()=>{$("seed").value=Math.floor(Math.random()*4294967296);buildSprites()};
 function curFps(){return FPS_STEPS[+$("fps").value]}
+
+// a PNG sequence is just images, so a sound file would be dropped silently
+function updatePngNote(){
+  $("pngNote").style.display=($("fmt").value==="png"&&audioFile)?"block":"none";
+}
 
 // ---- sound ----
 $("soundPick").onclick=()=>$("soundFile").click();
 $("soundFile").onchange=e=>{
   const f=e.target.files[0]; if(!f)return;
   const r=new FileReader();
-  r.onload=ev=>{audioFile={name:f.name,dataUrl:ev.target.result};$("soundName").textContent=f.name};
+  r.onload=async ev=>{
+    const dataUrl=ev.target.result;
+    audioFile={name:f.name,dataUrl,hash:await sha256(dataUrl)};
+    $("soundName").textContent=f.name;
+    stopAudio();
+    previewAudio=new Audio(dataUrl);
+    previewAudio.volume=effVolume(0);
+    updatePngNote();
+    if(playing)syncAudio();
+  };
   r.readAsDataURL(f);
 };
-$("soundClear").onclick=()=>{audioFile=null;$("soundFile").value="";$("soundName").textContent="none"};
+$("soundClear").onclick=()=>{
+  stopAudio();previewAudio=null;audioFile=null;
+  $("soundFile").value="";$("soundName").textContent="none";updatePngNote();
+};
+function effVolume(t){
+  let v=(+$("vol").value)/100;
+  if($("fadeOut").checked&&t>0.75) v*=Math.max(0,1-(t-0.75)/0.25);
+  return Math.max(0,Math.min(1,v));
+}
+function stopAudio(){ if(previewAudio){try{previewAudio.pause()}catch(e){}} }
+function restartAudio(){
+  if(!previewAudio)return;
+  try{
+    previewAudio.currentTime=0;
+    previewAudio.volume=effVolume(0);
+    const p=previewAudio.play(); if(p&&p.catch)p.catch(()=>{});
+  }catch(e){}
+}
+// jump the sound to wherever the preview head is, or stop it when paused
+function syncAudio(){
+  if(!previewAudio)return;
+  if(!playing){stopAudio();return}
+  try{
+    const at=tNorm*(+$("dur").value);
+    previewAudio.currentTime=(isFinite(previewAudio.duration)&&at<previewAudio.duration)?at:0;
+    previewAudio.volume=effVolume(tNorm);
+    const p=previewAudio.play(); if(p&&p.catch)p.catch(()=>{});
+  }catch(e){}
+}
+$("vol").oninput=()=>{
+  $("volV").textContent=$("vol").value+"%";
+  if(previewAudio)previewAudio.volume=effVolume(tNorm);
+};
+$("fadeOut").onchange=()=>{if(previewAudio)previewAudio.volume=effVolume(tNorm)};
 
 // ---- logo ----
 LOGO_ANIMS.forEach(a=>{
@@ -510,7 +613,8 @@ $("logoFile").onchange=e=>{
     const dataUrl=ev.target.result;
     const anim=await decodeFrames(dataUrl,f.type);
     const f0=anim.frames[0];
-    logo={name:f.name,dataUrl,frames:anim.frames,durations:anim.durations,total:anim.total,
+    logo={name:f.name,dataUrl,hash:await sha256(dataUrl),
+          frames:anim.frames,durations:anim.durations,total:anim.total,
           nw:f0.width||f0.naturalWidth||1, nh:f0.height||f0.naturalHeight||1};
     $("logoName").textContent=f.name;
     $("logoOpts").style.display="block";
@@ -525,7 +629,7 @@ $("logoClear").onclick=()=>{
 ["logoSize","logoDx","logoDy"].forEach(id=>{
   $(id).oninput=()=>{$(id+"V").textContent=$(id).value+"%"};
 });
-// The logo only exists while the emotes have the screen covered, so a short
+// The logo only exists while the images have the screen covered, so a short
 // hold gives it almost no time. Nudge the slider up (visibly) on first load.
 function checkLogoHold(autofix){
   if(!logo){$("logoHint").style.display="none";return}
@@ -568,15 +672,25 @@ function buildSprites(){
   viewScale=CW/renderW;
   const epx=+$("size").value;
   const dens=+$("dens").value;
+  const variety=Math.max(0,Math.min(0.6,(+$("vary").value)/100));
   // the layout is built in RENDER pixels and scaled down only when drawing,
   // otherwise the preview and the render would tile differently
-  const layoutDens=(style==="downpour")?dens*1.5:dens;
+  let layoutDens=(style==="downpour")?dens*1.5:dens;
+  // shrunken images open holes at the peak, so pack tighter (mirrors engine)
+  if(variety>0)layoutDens*=1+variety*2.5;
   const cell=Math.max(8,epx*0.62/Math.max(1,Math.sqrt(layoutDens)));
   const cols=Math.ceil(renderW/cell)+1, rows=Math.ceil(renderH/cell)+1;
+  // weighted picking: an image set to 3× sits in the pool three times. With
+  // every weight at 1 the pool is 0..n-1, so old seeds lay out unchanged.
+  const pool=[];
+  emotes.forEach((e,i)=>{
+    const wt=Math.max(1,Math.min(9,(e.weight|0)||1));
+    for(let k=0;k<wt;k++)pool.push(i);
+  });
   const r=Rng($("seed").value||0);
   for(let yy=0;yy<rows;yy++)for(let xx=0;xx<cols;xx++){
-    const idx=r.index(emotes.length);
-    sprites.push({
+    const idx=pool[r.index(pool.length)];
+    const s={
       em:emotes[idx],
       hx:xx*cell+cell/2+r.uniform(-cell*0.25,cell*0.25),
       hy:yy*cell+cell/2+r.uniform(-cell*0.25,cell*0.25),
@@ -584,7 +698,11 @@ function buildSprites(){
       seed:r.next(), rot:r.uniform(0,360), spin:r.uniform(-120,120),
       ang:r.uniform(0,2*Math.PI), dist:r.uniform(0.5,1.0),
       delay:r.next(), phase:r.next(),
-    });
+    };
+    // drawn last, and only when variety is on, so a seed with variety off
+    // lays out exactly as it did before this option existed
+    s.sscale=variety>0 ? 1+variety*(r.next()-0.5)*2 : 1;
+    sprites.push(s);
   }
   r.shuffle(sprites);
 }
@@ -601,6 +719,7 @@ function easeBounce(t){
   if(t<2.5/d1){t-=2.25/d1;return n1*t*t+0.9375}
   t-=2.625/d1;return n1*t*t+0.984375;
 }
+function popScale(p){const c1=2,c3=c1+1,u=p-1;return 1+c3*u*u*u+c1*u*u}
 const EASE={smooth:easeIO,linear:easeLinear,overshoot:easeOvershoot,bounce:easeBounce};
 function windows(hold,inFrac){
   inFrac=Math.min(0.95,Math.max(0.05,inFrac));
@@ -667,8 +786,12 @@ function drawLogo(t){
   const tr=logoTransform(anim,ph[1],jit);
   if(tr.alpha<=0.01||tr.sx<=0.01||tr.sy<=0.01)return;
   const im=emoteFrame(logo,t*(+$("dur").value)*1000,0);
-  const baseW=renderW*(+$("logoSize").value)/100;
-  const baseH=baseW*(logo.nh/logo.nw);
+  // mirrors engine.logo_scale: width first, then clamp so a tall logo still
+  // fits inside 80% of the canvas height
+  let baseW=renderW*(+$("logoSize").value)/100;
+  let baseH=baseW*(logo.nh/logo.nw);
+  const maxH=renderH*0.8;
+  if(baseH>maxH){baseW*=maxH/baseH;baseH=maxH;}
   const pt=anchorPoint(logoAnchor,renderW,renderH,baseW,baseH);
   const ax=pt[0]+tr.dx*renderW+(+$("logoDx").value)/100*renderW;
   const ay=pt[1]+tr.dy*renderH+(+$("logoDy").value)/100*renderH;
@@ -684,9 +807,10 @@ function drawLogo(t){
 function draw(){
   ctx.clearRect(0,0,CW,CH);
   if(!emotes.length){ctx.fillStyle="#8b95a8";ctx.font="13px sans-serif";ctx.textAlign="center";
-    ctx.fillText("Add emotes to preview the transition",CW/2,CH/2);return;}
+    ctx.fillText("Add images to preview the transition",CW/2,CH/2);return;}
   const hold=+$("hold").value, inFrac=+$("infrac").value;
   const cov=coverage(tNorm,hold,inFrac);
+  const downStart=windows(hold,inFrac)[2];
   const ease=EASE[$("easing").value]||easeIO;
   const dir=DIR_OPTS[style]?$("dir").value:null;
   const tMs=tNorm*(+$("dur").value)*1000;
@@ -710,14 +834,14 @@ function draw(){
     const up=dir==="up";
     for(const s of sprites){
       const im=emoteFrame(s.em,tMs,s.phase), dims=s.em.dims;
-      const ih=dims.h;
+      const ih=dims.h*s.sscale;
       const vy=(H+2*ih)*1.25;
       const y=s.hy+(tNorm-inFrac)*(up?-vy:vy);
       const wob=s.seed*6.28;
       const x=s.hx+(Math.sin(tNorm*5+wob)-Math.sin(inFrac*5+wob))*10;
       const rot=(s.rot+s.spin*tNorm*2)*Math.PI/180;
       let a=1;if(y<-ih*0.5||y>H+ih*0.5)a=0;
-      blit(im,dims,x,y,rot,a,1);
+      blit(im,dims,x,y,rot,a,s.sscale);
     }
     drawLogo(tNorm);
     return;
@@ -729,10 +853,23 @@ function draw(){
       const im=emoteFrame(s.em,tMs,s.phase);
       const dx=s.hx-cx,dy=s.hy-cy;
       const x=cx+dx*k,y=cy+dy*k;
-      const scale=0.05+0.95*k;
+      const scale=(0.05+0.95*k)*s.sscale;
       const rot=(s.rot+s.spin*(1-cov))*Math.PI/180;
       const a=Math.min(1,cov*1.6);
       blit(im,s.em.dims,x,y,rot,a,scale);
+    }
+    drawLogo(tNorm);
+    return;
+  }
+  // ---- popcorn: no travel, each image pops in where it lands ----
+  if(style==="popcorn"){
+    for(const s of sprites){
+      const im=emoteFrame(s.em,tMs,s.phase);
+      const covS=stagger(cov,s.delay);
+      const k=ease(covS);
+      const scale=Math.max(0,popScale(k))*s.sscale;
+      const a=Math.min(1,covS*3);
+      blit(im,s.em.dims,s.hx,s.hy,s.rot*Math.PI/180,a,scale);
     }
     drawLogo(tNorm);
     return;
@@ -741,9 +878,10 @@ function draw(){
   // ---- converge family ----
   for(const s of sprites){
     const im=emoteFrame(s.em,tMs,s.phase), dims=s.em.dims;
-    const iw=dims.w, ih=dims.h;
+    const ss=s.sscale;
+    const iw=dims.w*ss, ih=dims.h*ss;
     const hx=s.hx, hy=s.hy;
-    let fx,fy,covS;
+    let fx,fy,covS,offX=0,offY=0;
 
     if(style==="wipe"){
       const hxn=hx/W, hyn=hy/H, X=(W+iw)*1.4, Y=(H+ih)*1.4;
@@ -760,6 +898,16 @@ function draw(){
       else if(dir==="left"){fx=hx+(W+iw)*reach;fy=hy;}
       else if(dir==="right"){fx=hx-(W+iw)*reach;fy=hy;}
       else{fx=hx;fy=hy-(H+ih)*reach;}
+    }else if(style==="wave"){
+      const hxn=hx/W, hyn=hy/H;
+      let delay;
+      if(dir==="left"){fx=hx+(W+iw)*1.3;fy=hy;delay=1-hxn;}
+      else if(dir==="up"){fx=hx;fy=hy+(H+ih)*1.3;delay=1-hyn;}
+      else if(dir==="down"){fx=hx;fy=hy-(H+ih)*1.3;delay=hyn;}
+      else{fx=hx-(W+iw)*1.3;fy=hy;delay=hxn;}
+      covS=stagger(cov,clamp01(delay));
+      if(dir==="left"||dir==="right")offY=Math.sin(hxn*4*Math.PI+tNorm*6)*H*0.08*(1-covS);
+      else offX=Math.sin(hyn*4*Math.PI+tNorm*6)*W*0.08*(1-covS);
     }else{
       covS=cov;
       const ang=s.ang;
@@ -780,31 +928,92 @@ function draw(){
       else if(style==="vortex"){const dx=hx-cx,dy=hy-cy;const ba=Math.atan2(dy,dx);
         const dist=Math.hypot(dx,dy);const a2=ba+(1-covS)*9;const rr=dist+(1-covS)*diag*0.5;
         fx=cx+Math.cos(a2)*rr;fy=cy+Math.sin(a2)*rr;}
+      else if(style==="shatter"){const rr=diag*(0.6+0.6*s.dist);
+        fx=cx+Math.cos(ang)*rr;fy=cy+Math.sin(ang)*rr;}
       else{const rr=diag*(0.7+0.5*s.dist);fx=cx+Math.cos(ang)*rr;fy=cy+Math.sin(ang)*rr;}
     }
 
     const k=ease(covS);
-    const x=fx+(hx-fx)*k, y=fy+(hy-fy)*k;
-    const rot=(s.rot+s.spin*(1-covS))*Math.PI/180;
-    const a=Math.min(1,covS*1.6);
-    blit(im,dims,x,y,rot,a,1);
+    let x=fx+(hx-fx)*k+offX, y=fy+(hy-fy)*k+offY;
+    let rot=(s.rot+s.spin*(1-covS))*Math.PI/180;
+    let a=Math.min(1,covS*1.6);
+
+    // ---- shatter exit: the wall breaks and the pieces fall ----
+    if(style==="shatter"&&tNorm>downStart){
+      const u=(tNorm-downStart)/Math.max(1e-6,1-downStart);
+      const drift=diag*0.35*s.dist;
+      x=hx+Math.cos(s.ang)*drift*u;
+      y=hy+Math.sin(s.ang)*drift*u+diag*1.25*u*u;
+      rot=(s.rot+s.spin*u*3)*Math.PI/180;
+      a=1;
+    }
+
+    blit(im,dims,x,y,rot,a,ss);
   }
   drawLogo(tNorm);
 }
 function loop(ts){
-  if(playing){const dur=+$("dur").value*1000;const dt=ts-lastTs;lastTs=ts;tNorm+=dt/dur;if(tNorm>1)tNorm=0;$("scrub").value=tNorm*100;}
+  if(playing){
+    const dur=+$("dur").value*1000;const dt=ts-lastTs;lastTs=ts;tNorm+=dt/dur;
+    if(tNorm>1){tNorm=0;restartAudio();}
+    $("scrub").value=tNorm*100;
+    if(previewAudio&&!previewAudio.paused)previewAudio.volume=effVolume(tNorm);
+  }
   else lastTs=ts;
   draw();requestAnimationFrame(loop);
 }
-$("play").onclick=()=>{playing=!playing;$("play").textContent=playing?"❚❚":"▶";lastTs=performance.now()};
-$("scrub").oninput=()=>{playing=false;$("play").textContent="▶";tNorm=+$("scrub").value/100};
+$("play").onclick=()=>{
+  playing=!playing;$("play").textContent=playing?"❚❚":"▶";
+  lastTs=performance.now();syncAudio();
+};
+$("scrub").oninput=()=>{
+  playing=false;$("play").textContent="▶";tNorm=+$("scrub").value/100;stopAudio();
+};
 function updateTpt(){
   // identical arithmetic to engine.build
   const fps=curFps(), dur=+$("dur").value;
   const n=Math.max(2,Math.round(fps*dur));
   const inFrac=windows(+$("hold").value,+$("infrac").value)[0];
-  $("tpt").textContent=Math.round(n*inFrac/fps*1000)+" ms";
+  lastTptMs=Math.round(n*inFrac/fps*1000);
+  $("tpt").textContent=lastTptMs+" ms";
 }
+// rough size guess so a 4K 5-second render doesn't come as a surprise
+function updateEstimate(){
+  const fps=curFps(), dur=+$("dur").value;
+  const n=Math.max(2,Math.round(fps*dur));
+  const p=$("res").value.split("x").map(Number);
+  const q=+$("quality").value;
+  // rough VP9 guess, tuned against real 1080p and 720p renders
+  const mb=n*p[0]*p[1]*0.000000035*(46-q)/18;
+  const el=$("estimate");
+  const size=mb<10?mb.toFixed(1):String(Math.round(mb));
+  el.textContent=n+" frames at "+p[0]+"×"+p[1]+" — about "+size+" MB";
+  if(n>400){el.style.color="var(--bad)";el.textContent+=" — long render"}
+  else el.style.color="";
+}
+// ---- clipboard ----
+async function copyText(txt,btn){
+  let done=false;
+  try{await navigator.clipboard.writeText(txt);done=true}
+  catch(e){
+    const ta=document.createElement("textarea");
+    ta.value=txt;ta.style.position="fixed";ta.style.opacity="0";
+    document.body.appendChild(ta);ta.select();
+    try{done=document.execCommand("copy")}catch(_){}
+    ta.remove();
+  }
+  if(!btn)return;
+  const old=btn.textContent;
+  btn.textContent=done?"copied":"copy failed";
+  setTimeout(()=>{btn.textContent=old},900);
+}
+$("copyTpt").onclick=()=>copyText(String(lastTptMs),$("copyTpt"));
+$("copyTpt2").onclick=()=>copyText(String(lastTptMs),$("copyTpt2"));
+$("openFolder").onclick=async ()=>{
+  if(!lastFolder)return;
+  const r=await window.pywebview.api.open_folder(lastFolder);
+  if(!r||!r.ok)flashErr("Couldn't open the folder: "+((r&&r.error)||"unknown"));
+};
 
 // ---- presets ----
 function currentSettings(){
@@ -814,6 +1023,7 @@ function currentSettings(){
     easing:$("easing").value, direction:DIR_OPTS[style]?$("dir").value:null,
     outline:+$("outline").value, outlineColor:$("outlineColor").value,
     shadow:$("shadow").checked, fmt:$("fmt").value, seed:$("seed").value,
+    volume:+$("vol").value, fadeOut:$("fadeOut").checked,
     logoSize:+$("logoSize").value, logoAnchor:logoAnchor,
     logoDx:+$("logoDx").value, logoDy:+$("logoDy").value,
     logoIn:$("logoIn").value, logoOut:$("logoOut").value};
@@ -837,13 +1047,20 @@ function applySettings(s){
   ["logoSize","logoDx","logoDy"].forEach(id=>{$(id+"V").textContent=$(id).value+"%"});
   if(s.seed!==undefined&&s.seed!==null&&s.seed!=="")set("seed",s.seed);
   if(s.fps!==undefined){const i=FPS_STEPS.indexOf(+s.fps);if(i>=0)$("fps").value=i}
+  if(s.volume!==undefined&&s.volume!==null)$("vol").value=s.volume;
+  $("volV").textContent=$("vol").value+"%";
+  $("fadeOut").checked=!!s.fadeOut;
+  if(previewAudio)previewAudio.volume=effVolume(tNorm);
   $("shadow").checked=!!s.shadow;
   syncDirection();
   if(s.direction&&DIR_OPTS[style]&&DIR_OPTS[style].includes(s.direction))$("dir").value=s.direction;
-  ["dur","fps","size","dens","hold","infrac","quality","outline"].forEach(id=>{
+  ["dur","fps","size","dens","vary","hold","infrac","quality","outline"].forEach(id=>{
     $(id+"V").textContent=fmt(id,$(id).value)});
   $("gen").textContent="Generate "+FMT_LABEL[$("fmt").value];
-  buildSprites();updateTpt();
+  updatePngNote();
+  buildSprites();updateTpt();updateEstimate();
+  // the hold may have moved, so the logo hint has to be re-checked
+  checkLogoHold(false);
 }
 async function loadPresets(sel){
   try{
@@ -900,12 +1117,39 @@ window.__stingerBatch=(idx,total,styleName,stage,pct)=>{
 };
 
 // ---- payload ----
+// Only hashes go over the bridge. syncAssets makes sure the render side has
+// the bytes behind each hash before a payload that names it is sent.
+function allAssets(){
+  const a=emotes.slice();
+  if(logo)a.push(logo);
+  if(audioFile)a.push(audioFile);
+  return a.filter(x=>x&&x.hash);
+}
+async function syncAssets(force){
+  const all=allAssets();
+  if(!all.length)return;
+  let missing=all.map(a=>a.hash);
+  if(!force){
+    try{
+      const r=await window.pywebview.api.have_hashes(missing);
+      missing=(r&&r.missing)||[];
+    }catch(e){}
+  }
+  if(!missing.length)return;
+  const want=new Set(missing);
+  await window.pywebview.api.sync_assets(
+    all.filter(a=>want.has(a.hash))
+       .map(a=>({hash:a.hash,name:a.name,dataUrl:a.dataUrl})));
+}
 function basePayload(){
   const s=currentSettings();
   return {
-    emotes:emotes.map(e=>({name:e.name,dataUrl:e.dataUrl})),
-    audio:audioFile,
-    logo:logo?{name:logo.name,dataUrl:logo.dataUrl}:null,
+    emoteHashes:emotes.map(e=>e.hash),
+    weights:emotes.map(e=>(e.weight|0)||1),
+    audioHash:audioFile?audioFile.hash:null,
+    logoHash:logo?logo.hash:null,
+    volume:s.volume, fadeOut:s.fadeOut,
+    sizeVariety:+$("vary").value,
     logoSize:s.logoSize, logoAnchor:s.logoAnchor, logoDx:s.logoDx,
     logoDy:s.logoDy, logoIn:s.logoIn, logoOut:s.logoOut,
     style:s.style, res:s.res, fps:s.fps, duration:s.duration, hold:s.hold,
@@ -914,6 +1158,16 @@ function basePayload(){
     outlineColor:s.outlineColor, shadow:s.shadow, fmt:s.fmt,
     seed:s.seed===""?null:+s.seed,
   };
+}
+// one retry, in case the backend lost its copy of an asset
+async function callWithAssets(fn){
+  await syncAssets(false);
+  let r=await fn(basePayload());
+  if(r&&!r.ok&&r.missing&&r.missing.length){
+    await syncAssets(true);
+    r=await fn(basePayload());
+  }
+  return r;
 }
 function startWork(btn,label){
   btn.disabled=true;btn.classList.add("working");
@@ -933,23 +1187,27 @@ function endWork(){
 
 // ---- generate ----
 $("gen").onclick=async ()=>{
-  if(!emotes.length){flashErr("Add at least one emote first.");return;}
+  if(!emotes.length){flashErr("Add at least one image first.");return;}
   startWork($("gen"),"Working…");
   try{
-    const r=await window.pywebview.api.generate(basePayload());
+    const r=await callWithAssets(p=>window.pywebview.api.generate(p));
     if(r.ok){
       $("progFill").style.width="100%";
       $("progLabel").textContent="Done";
-      lastOut=r.out; lastFmt=r.format||"webm";
+      lastOut=r.out; lastFmt=r.format||"webm"; lastFolder=null;
+      lastTptMs=r.transition_ms;
       $("seed").value=r.seed;              // show the seed that was actually used
       $("resTitle").textContent=FMT_LABEL[lastFmt]+" ready";
       $("resMeta").innerHTML=
-        `${r.count} emotes · ${r.frames} frames · style ${r.direction?style+" ("+r.direction+")":style}<br>`+
-        `seed <b>${r.seed}</b><br>OBS transition point: <b>${r.transition_ms} ms</b>`;
+        `${r.count} images · ${r.frames} frames · style ${r.direction?esc(style)+" ("+esc(r.direction)+")":esc(style)}<br>`+
+        `seed <b>${r.seed}</b><br>OBS transition point: <b>${r.transition_ms} ms</b>`+
+        (r.audio_dropped?`<br>Sound is not included in a PNG sequence.`:``);
       $("errText").style.display="none";
       $("saveBtn").style.display="inline-block";
       $("saveBtn").textContent="Save file…";
       $("saveBtn").dataset.mode="one";
+      $("copyTpt2").style.display="inline-block";
+      $("openFolder").style.display="none";
       $("result").classList.add("show");$("result").classList.remove("err");
       $("obsNote").style.display="block";
       setTimeout(()=>$("progress").classList.remove("show"),800);
@@ -962,23 +1220,26 @@ $("gen").onclick=async ()=>{
 };
 
 $("genAll").onclick=async ()=>{
-  if(!emotes.length){flashErr("Add at least one emote first.");return;}
+  if(!emotes.length){flashErr("Add at least one image first.");return;}
   startWork($("genAll"),"Rendering…");
   try{
-    const r=await window.pywebview.api.generate_all(basePayload());
+    const r=await callWithAssets(p=>window.pywebview.api.generate_all(p));
     if(r.ok){
       $("progFill").style.width="100%";
       $("progLabel").textContent="Done";
-      lastFmt=r.format||"webm";
+      lastFmt=r.format||"webm"; lastFolder=null;
       $("seed").value=r.seed;
       $("resTitle").textContent=`${r.count} styles rendered`;
       $("resMeta").innerHTML=
         `seed <b>${r.seed}</b> · format ${FMT_LABEL[lastFmt]}<br>`+
-        r.files.map(f=>`stinger_${f.style}${EXT[lastFmt]} — <b>${f.transition_ms} ms</b>`).join("<br>");
+        (r.audio_dropped?`Sound is not included in a PNG sequence.<br>`:``)+
+        r.files.map(f=>`stinger_${esc(f.style)}${EXT[lastFmt]} — <b>${f.transition_ms} ms</b>`).join("<br>");
       $("errText").style.display="none";
       $("saveBtn").style.display="inline-block";
       $("saveBtn").textContent="Save all…";
       $("saveBtn").dataset.mode="all";
+      $("copyTpt2").style.display="none";
+      $("openFolder").style.display="none";
       $("result").classList.add("show");$("result").classList.remove("err");
       $("obsNote").style.display="block";
       setTimeout(()=>$("progress").classList.remove("show"),800);
@@ -990,10 +1251,17 @@ $("genAll").onclick=async ()=>{
   finally{endWork();}
 };
 
+// paths come back from native dialogs, but they still land in innerHTML
+function esc(v){
+  return String(v==null?"":v).replace(/[&<>"']/g,c=>(
+    {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
 function flashErr(msg,trace){
   $("resTitle").textContent="Couldn't render";
   $("resMeta").textContent=msg;
   $("saveBtn").style.display="none";
+  $("copyTpt2").style.display="none";
+  $("openFolder").style.display="none";
   if(trace){$("errText").style.display="block";$("errText").textContent=trace;}
   else $("errText").style.display="none";
   $("result").classList.add("show","err");
@@ -1001,18 +1269,26 @@ function flashErr(msg,trace){
 $("saveBtn").onclick=async ()=>{
   if($("saveBtn").dataset.mode==="all"){
     const r=await window.pywebview.api.save_all();
-    if(r.ok){$("resMeta").innerHTML+=`<br>Saved <b>${r.saved}</b> files to: <b>${r.folder}</b>`;}
+    if(r.ok){
+      lastFolder=r.folder;
+      $("openFolder").style.display="inline-block";
+      $("resMeta").innerHTML+=`<br>Saved <b>${r.saved}</b> files to: <b>${esc(r.folder)}</b>`;
+    }
     else if(!r.cancelled){flashErr("Save failed: "+(r.error||"unknown"));}
     return;
   }
   if(!lastOut)return;
   const r=await window.pywebview.api.save_as(lastOut,lastFmt);
-  if(r.ok){$("resMeta").innerHTML+=`<br>Saved to: <b>${r.dest}</b>`;}
+  if(r.ok){
+    lastFolder=r.folder||null;
+    if(lastFolder)$("openFolder").style.display="inline-block";
+    $("resMeta").innerHTML+=`<br>Saved to: <b>${esc(r.dest)}</b>`;
+  }
   else if(!r.cancelled){flashErr("Save failed: "+(r.error||"unknown"));}
 };
 
 // init
-syncDirection();buildSprites();updateTpt();
+syncDirection();buildSprites();updateTpt();updateEstimate();updatePngNote();
 requestAnimationFrame(loop);
 </script>
 </body>

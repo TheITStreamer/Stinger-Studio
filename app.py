@@ -3,7 +3,7 @@
 app.py — Stinger Studio desktop app.
 
 Opens a native window wrapping the HTML UI. The UI calls into the `Api` class
-below via pywebview's JS bridge. The bridge saves uploaded emotes to a temp
+below via pywebview's JS bridge. The bridge saves uploaded images to a temp
 folder, runs the render engine, and returns the finished file's path.
 
 Presets live outside the temp folder (%APPDATA%/StingerStudio on Windows) so
@@ -17,6 +17,7 @@ import json
 import multiprocessing
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import traceback
@@ -73,24 +74,42 @@ BUILTIN_PRESETS = {
         "emotePx": 150, "res": "1920x1080", "fps": 60, "quality": 26,
         "inFrac": 0.45, "easing": "overshoot", "direction": None,
         "outline": 0, "outlineColor": "#000000", "shadow": False, "fmt": "webm",
+        "volume": 100, "fadeOut": False,
     },
     "Slow flood": {
         "style": "rain", "duration": 2.0, "hold": 0.16, "density": 2.6,
         "emotePx": 180, "res": "1920x1080", "fps": 30, "quality": 28,
         "inFrac": 0.55, "easing": "smooth", "direction": "down",
         "outline": 0, "outlineColor": "#000000", "shadow": True, "fmt": "webm",
+        "volume": 100, "fadeOut": True,
     },
     "Curtain wipe": {
         "style": "wipe", "duration": 1.4, "hold": 0.1, "density": 2.2,
         "emotePx": 170, "res": "1920x1080", "fps": 60, "quality": 24,
         "inFrac": 0.5, "easing": "smooth", "direction": "right",
         "outline": 3, "outlineColor": "#ffffff", "shadow": False, "fmt": "webm",
+        "volume": 100, "fadeOut": True,
     },
     "Chaos bounce": {
         "style": "swarm", "duration": 1.2, "hold": 0.06, "density": 3.0,
         "emotePx": 140, "res": "1920x1080", "fps": 60, "quality": 28,
         "inFrac": 0.4, "easing": "bounce", "direction": None,
         "outline": 2, "outlineColor": "#000000", "shadow": True, "fmt": "webm",
+        "volume": 100, "fadeOut": False,
+    },
+    "Popcorn pop": {
+        "style": "popcorn", "duration": 1.1, "hold": 0.08, "density": 2.6,
+        "emotePx": 160, "res": "1920x1080", "fps": 60, "quality": 26,
+        "inFrac": 0.5, "easing": "smooth", "direction": None,
+        "outline": 0, "outlineColor": "#000000", "shadow": False, "fmt": "webm",
+        "volume": 100, "fadeOut": True,
+    },
+    "Glass break": {
+        "style": "shatter", "duration": 1.6, "hold": 0.1, "density": 2.4,
+        "emotePx": 170, "res": "1920x1080", "fps": 60, "quality": 26,
+        "inFrac": 0.45, "easing": "smooth", "direction": None,
+        "outline": 0, "outlineColor": "#000000", "shadow": True, "fmt": "webm",
+        "volume": 100, "fadeOut": False,
     },
 }
 
@@ -101,7 +120,12 @@ class Api:
     def __init__(self):
         self.workdir = tempfile.mkdtemp(prefix="stinger_app_")
         self.presets_path = os.path.join(config_dir(), "presets.json")
+        self.settings_path = os.path.join(config_dir(), "settings.json")
         self.batch_files = []
+        # content hash -> file on disk, so an image crosses the bridge once
+        self.assets = {}
+        self.assetdir = os.path.join(self.workdir, "emotes")
+        os.makedirs(self.assetdir, exist_ok=True)
         engine.FFMPEG = locate_ffmpeg()
 
     # ---------------- capability probes ----------------
@@ -131,44 +155,50 @@ class Api:
             return {"ok": False, "error": str(e)}
 
     # ---------------- uploads ----------------
-    def _save_emotes(self, emotes):
-        """emotes: list of {name, dataUrl}. Returns list of file paths."""
-        emdir = os.path.join(self.workdir, "emotes")
-        shutil.rmtree(emdir, ignore_errors=True)
-        os.makedirs(emdir, exist_ok=True)
-        paths = []
-        for i, em in enumerate(emotes):
-            data = em["dataUrl"].split(",", 1)[1]
-            raw = base64.b64decode(data)
-            # keep extension from name if present, default png
-            ext = os.path.splitext(em.get("name", ""))[1] or ".png"
-            p = os.path.join(emdir, f"emote_{i:03d}{ext}")
-            with open(p, "wb") as f:
-                f.write(raw)
-            paths.append(p)
-        return paths
+    # Files cross the bridge once and are then addressed by content hash.
+    # Re-rendering with the same images sends no image data at all.
+    def have_hashes(self, hashes):
+        """Tell the UI which of these it still needs to upload."""
+        missing = [h for h in (hashes or []) if h and h not in self.assets]
+        return {"ok": True, "missing": missing}
 
-    def _save_audio(self, audio):
-        """audio: {name, dataUrl} or None. Returns a path or None."""
-        if not audio or not audio.get("dataUrl"):
-            return None
-        data = audio["dataUrl"].split(",", 1)[1]
-        ext = os.path.splitext(audio.get("name", ""))[1] or ".mp3"
-        p = os.path.join(self.workdir, f"audio{ext}")
-        with open(p, "wb") as f:
-            f.write(base64.b64decode(data))
-        return p
+    def sync_assets(self, items):
+        """items: [{hash, name, dataUrl}]. Only new hashes need a dataUrl."""
+        try:
+            for it in items or []:
+                h = it.get("hash")
+                if not h or h in self.assets:
+                    continue
+                data_url = it.get("dataUrl")
+                if not data_url:
+                    continue
+                raw = base64.b64decode(data_url.split(",", 1)[1])
+                ext = os.path.splitext(it.get("name", ""))[1] or ".bin"
+                p = os.path.join(self.assetdir, h[:32] + ext)
+                with open(p, "wb") as f:
+                    f.write(raw)
+                self.assets[h] = p
+            return {"ok": True, "have": len(self.assets)}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
-    def _save_logo(self, logo):
-        """logo: {name, dataUrl} or None. Returns a path or None."""
-        if not logo or not logo.get("dataUrl"):
-            return None
-        data = logo["dataUrl"].split(",", 1)[1]
-        ext = os.path.splitext(logo.get("name", ""))[1] or ".png"
-        p = os.path.join(self.workdir, f"logo{ext}")
-        with open(p, "wb") as f:
-            f.write(base64.b64decode(data))
-        return p
+    def _missing(self, hashes):
+        return [h for h in hashes if h and h not in self.assets]
+
+    def _resolve(self, payload):
+        """Turn the payload's hash lists into file paths.
+
+        Returns (paths, audio_path, logo_path) or raises KeyError listing what
+        the UI has to send again."""
+        em_hashes = payload.get("emoteHashes") or []
+        audio_h = payload.get("audioHash") or None
+        logo_h = payload.get("logoHash") or None
+        miss = self._missing(list(em_hashes) + [audio_h, logo_h])
+        if miss:
+            raise KeyError(miss)
+        return ([self.assets[h] for h in em_hashes],
+                self.assets.get(audio_h) if audio_h else None,
+                self.assets.get(logo_h) if logo_h else None)
 
     # ---------------- rendering ----------------
     def _build_args(self, payload, paths, audio_path, logo_path=None):
@@ -204,24 +234,30 @@ class Api:
             logo_dy=float(payload.get("logoDy", 0.0)),
             logo_in=payload.get("logoIn", "pop"),
             logo_out=payload.get("logoOut") or None,
+            size_variety=float(payload.get("sizeVariety", 0) or 0) / 100.0,
+            weights=payload.get("weights") or None,
+            volume=float(payload.get("volume", 100) or 0) / 100.0,
+            fade_out=bool(payload.get("fadeOut", False)),
         )
 
     def generate(self, payload):
-        """Render a stinger. payload carries emotes + settings from the UI.
+        """Render a stinger. payload carries images + settings from the UI.
 
         Returns {ok, out, transition_ms, frames, count, seed} or {ok:False, error}.
         """
         try:
-            emotes = payload.get("emotes", [])
-            if not emotes:
-                return {"ok": False, "error": "Add at least one emote first."}
-
-            paths = self._save_emotes(emotes)
-            audio_path = self._save_audio(payload.get("audio"))
-            logo_path = self._save_logo(payload.get("logo"))
+            if not payload.get("emoteHashes"):
+                return {"ok": False, "error": "Add at least one image first."}
+            try:
+                paths, audio_path, logo_path = self._resolve(payload)
+            except KeyError as miss:
+                return {"ok": False, "missing": miss.args[0],
+                        "error": "Image data went missing — sending it again."}
             args = self._build_args(payload, paths, audio_path, logo_path)
 
             fmt = args["fmt"]
+            if fmt == "png":
+                args["audio"] = None
             out = os.path.join(self.workdir, "stinger" + engine.EXT.get(fmt, ".webm"))
 
             def on_progress(stage, done, total):
@@ -237,6 +273,7 @@ class Api:
             r = engine.build(out=out, style=payload.get("style", "rain"),
                              progress=on_progress, **args)
             r["ok"] = True
+            r["audio_dropped"] = bool(audio_path) and fmt == "png"
             return r
         except Exception as e:
             return {"ok": False, "error": str(e),
@@ -245,18 +282,20 @@ class Api:
     def generate_all(self, payload):
         """Render the current settings once per style into the workdir.
 
-        Emotes are uploaded and written once, then reused for all 12 renders.
+        Images are uploaded and written once, then reused for all 12 renders.
         """
         try:
-            emotes = payload.get("emotes", [])
-            if not emotes:
-                return {"ok": False, "error": "Add at least one emote first."}
-
-            paths = self._save_emotes(emotes)
-            audio_path = self._save_audio(payload.get("audio"))
-            logo_path = self._save_logo(payload.get("logo"))
+            if not payload.get("emoteHashes"):
+                return {"ok": False, "error": "Add at least one image first."}
+            try:
+                paths, audio_path, logo_path = self._resolve(payload)
+            except KeyError as miss:
+                return {"ok": False, "missing": miss.args[0],
+                        "error": "Image data went missing — sending it again."}
             args = self._build_args(payload, paths, audio_path, logo_path)
             fmt = args["fmt"]
+            if fmt == "png":
+                args["audio"] = None
             ext = engine.EXT.get(fmt, ".webm")
 
             # pin the seed once: otherwise an unset seed would be re-rolled for
@@ -292,12 +331,55 @@ class Api:
                 self.batch_files.append(out)
 
             return {"ok": True, "files": results, "count": len(results),
-                    "seed": args["seed"], "format": fmt}
+                    "seed": args["seed"], "format": fmt,
+                    "audio_dropped": bool(audio_path) and fmt == "png"}
         except Exception as e:
             return {"ok": False, "error": str(e),
                     "trace": traceback.format_exc()}
 
     # ---------------- saving ----------------
+    def _read_settings(self):
+        try:
+            with open(self.settings_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except (FileNotFoundError, ValueError, OSError):
+            return {}
+
+    def _write_settings(self, data):
+        try:
+            with open(self.settings_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+        except OSError:
+            pass
+
+    def _last_dir(self):
+        d = self._read_settings().get("lastSaveDir")
+        return d if d and os.path.isdir(d) else None
+
+    def _remember_dir(self, path):
+        d = path if os.path.isdir(path) else os.path.dirname(path)
+        if d and os.path.isdir(d):
+            data = self._read_settings()
+            data["lastSaveDir"] = d
+            self._write_settings(data)
+
+    def open_folder(self, path):
+        """Show a saved file's folder in the system file manager."""
+        try:
+            d = path if os.path.isdir(path) else os.path.dirname(path)
+            if not d or not os.path.isdir(d):
+                return {"ok": False, "error": "Folder not found."}
+            if os.name == "nt":
+                os.startfile(d)                             # noqa: S606
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", d])
+            else:
+                subprocess.Popen(["xdg-open", d])
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
     def save_as(self, src_path, fmt="webm"):
         """Open a native Save dialog and copy the rendered file there."""
         ext = engine.EXT.get(fmt, ".webm")
@@ -307,10 +389,15 @@ class Api:
             ".zip": ("Zip archive (*.zip)",),
         }[ext]
         try:
+            kw = {}
+            last = self._last_dir()
+            if last:
+                kw["directory"] = last
             result = window.create_file_dialog(
                 webview.SAVE_DIALOG,
                 save_filename="stinger" + ext,
                 file_types=filters,
+                **kw
             )
             if not result:
                 return {"ok": False, "cancelled": True}
@@ -318,7 +405,8 @@ class Api:
             if not dest.lower().endswith(ext):
                 dest += ext
             shutil.copyfile(src_path, dest)
-            return {"ok": True, "dest": dest}
+            self._remember_dir(dest)
+            return {"ok": True, "dest": dest, "folder": os.path.dirname(dest)}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
@@ -327,10 +415,15 @@ class Api:
         try:
             if not self.batch_files:
                 return {"ok": False, "error": "Nothing to save — run a batch first."}
-            result = window.create_file_dialog(webview.FOLDER_DIALOG)
+            kw = {}
+            last = self._last_dir()
+            if last:
+                kw["directory"] = last
+            result = window.create_file_dialog(webview.FOLDER_DIALOG, **kw)
             if not result:
                 return {"ok": False, "cancelled": True}
             folder = result if isinstance(result, str) else result[0]
+            self._remember_dir(folder)
             saved = []
             for src in self.batch_files:
                 if not os.path.isfile(src):

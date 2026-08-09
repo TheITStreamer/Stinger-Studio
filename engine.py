@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-engine.py — generate WebM stinger transitions for OBS from emote images.
+engine.py — generate WebM stinger transitions for OBS from a set of images.
 
 Outputs a VP9 WebM with alpha (yuva420p) sized for an OBS stinger transition:
-  scene A visible -> emotes flood and cover the screen -> emotes clear -> scene B visible.
+  scene A visible -> images flood and cover the screen -> images clear -> scene B visible.
 
 Alternative outputs: ProRes 4444 MOV (alpha) and a zipped PNG sequence.
 
@@ -11,23 +11,27 @@ The "transition point" (full-coverage frame, in ms) is printed at the end so you
 paste it into OBS's stinger transition settings.
 
 Animation styles:
-  rain       emotes pour from the top, pile up to full coverage, then fall away
-  burst      emotes explode outward from center, fill screen, then implode/fade
-  swipe      a dense wall of emotes sweeps across the screen and back
-  spiral     emotes spiral inward to cover, then spiral out
-  swarm      emotes scatter in from all edges, converge, then scatter out
+  rain       images pour from the top, pile up to full coverage, then fall away
+  burst      images explode outward from center, fill screen, then implode/fade
+  swipe      a dense wall of images sweeps across the screen and back
+  spiral     images spiral inward to cover, then spiral out
+  swarm      images scatter in from all edges, converge, then scatter out
   rows       alternating horizontal lines slide in from opposite sides
   columns    alternating vertical lines slide in from top and bottom
   downpour   a continuous fall with no pause, packed at the transition point
-  zoom       emotes rush toward the camera from a point, scaling up to fill
+  zoom       images rush toward the camera from a point, scaling up to fill
   wipe       a staggered diagonal band sweeps across like a curtain pull
-  shockwave  emotes ripple outward from center in concentric rings
+  shockwave  images ripple outward from center in concentric rings
   vortex     everything spins into the center and drains away, then back out
+  popcorn    each image pops in where it lands, no travel, staggered
+  wave       a wall slides in with a sine ripple that flattens as it settles
+  shatter    converges like burst, then drops away like broken glass
 
 Usage:
   python3 engine.py --images a.png b.png c.png --style rain --out stinger.webm
 """
 import argparse
+import json
 import math
 import os
 import random
@@ -36,23 +40,26 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from collections import OrderedDict
 from multiprocessing import Pool, cpu_count
 
 from PIL import Image, ImageChops, ImageFilter, ImageSequence
 
 STYLES = ["rain", "burst", "swipe", "spiral", "swarm",
-          "rows", "columns", "downpour", "zoom", "wipe", "shockwave", "vortex"]
+          "rows", "columns", "downpour", "zoom", "wipe", "shockwave", "vortex",
+          "popcorn", "wave", "shatter"]
 
 DIRECTIONS = ["left", "right", "up", "down"]
 
 # Styles that respond to the direction option, and the default that reproduces
-# the original motion. Direction always means "which way the emotes travel".
+# the original motion. Direction always means "which way the images travel".
 DIRECTIONAL = {"rain": "down", "swipe": "right", "wipe": "right",
-               "rows": "right", "columns": "down", "downpour": "down"}
+               "rows": "right", "columns": "down", "downpour": "down",
+               "wave": "right"}
 
 EASINGS = ["smooth", "linear", "overshoot", "bounce"]
 
-# Optional logo that lands on top of the emotes at the transition point.
+# Optional logo that lands on top of the images at the transition point.
 LOGO_ANIMS = ["pop", "slam", "spin", "fade", "drop", "rise", "flip", "swing",
               "glitch", "zoom", "none"]
 LOGO_ANCHORS = ["tl", "tc", "tr", "ml", "mc", "mr", "bl", "bc", "br"]
@@ -113,7 +120,7 @@ class Rng:
 
 
 # --------------------------------------------------------------------------
-# emote loading (+ effects, + animation)
+# image loading (+ effects, + animation)
 # --------------------------------------------------------------------------
 def parse_color(c, default=(0, 0, 0)):
     if not c:
@@ -188,7 +195,7 @@ def load_emotes(paths, target_px, outline=0, outline_color=(0, 0, 0),
                 shadow_opacity=0.5):
     """Load, scale and (once, here) bake in outline / shadow effects.
 
-    Returns a list of emote dicts: {frames, durations, total_ms}. Effects are
+    Returns a list of image dicts: {frames, durations, total_ms}. Effects are
     applied at load time so there is no per-frame cost during rendering.
     """
     outline_color = parse_color(outline_color)
@@ -218,6 +225,42 @@ def load_emotes(paths, target_px, outline=0, outline_color=(0, 0, 0),
             "total_ms": float(sum(durs)),
         })
     return emotes
+
+
+def bake_emotes_to_disk(emotes, folder):
+    """Write already-processed image frames out as PNGs.
+
+    Outline and shadow baking is slow, so the parent does it once and the
+    render workers read these files back instead of repeating the work. The
+    sidecar keeps the per-frame durations that the PNGs can't carry.
+    """
+    os.makedirs(folder, exist_ok=True)
+    meta = []
+    for i, em in enumerate(emotes):
+        paths = []
+        for j, fr in enumerate(em["frames"]):
+            p = os.path.join(folder, f"baked_{i:03d}_{j:04d}.png")
+            fr.save(p, "PNG")
+            paths.append(p)
+        meta.append({"frames": paths, "durations": list(em["durations"])})
+    with open(os.path.join(folder, "baked.json"), "w", encoding="utf-8") as f:
+        json.dump(meta, f)
+    return meta
+
+
+def load_baked_emotes(meta):
+    """Rebuild image dicts from pre-baked PNGs. No effects work at all."""
+    out = []
+    for m in meta:
+        frames = []
+        for p in m["frames"]:
+            im = Image.open(p)
+            im.load()
+            frames.append(im.convert("RGBA"))
+        durs = list(m["durations"])
+        out.append({"frames": frames, "durations": durs,
+                    "total_ms": float(sum(durs))})
+    return out
 
 
 def emote_frame(em, t_ms, phase):
@@ -272,6 +315,14 @@ def ease_bounce(t):
         return n1 * t * t + 0.9375
     t -= 2.625 / d1
     return n1 * t * t + 0.984375
+
+
+def pop_scale(p):
+    """0 -> overshoot ~1.15 -> 1. Used by the popcorn style."""
+    c1 = 2.0
+    c3 = c1 + 1.0
+    u = p - 1.0
+    return 1.0 + c3 * u * u * u + c1 * u * u
 
 
 EASE_FN = {
@@ -335,23 +386,50 @@ def resolve_direction(style, direction):
 # --------------------------------------------------------------------------
 # layout
 # --------------------------------------------------------------------------
-def make_sprite_layout(emotes, w, h, emote_px, density, rng):
+def expand_weights(n, weights):
+    """Index pool where each image appears `weight` times.
+
+    With every weight at 1 the pool is just 0..n-1, so rng.index(len(pool))
+    picks exactly what the unweighted code used to pick and old seeds keep
+    their layouts."""
+    if not weights:
+        return list(range(n))
+    pool = []
+    for i in range(n):
+        try:
+            wgt = int(weights[i])
+        except (IndexError, TypeError, ValueError):
+            wgt = 1
+        for _ in range(max(1, min(9, wgt))):
+            pool.append(i)
+    return pool or list(range(n))
+
+
+def make_sprite_layout(emotes, w, h, emote_px, density, rng,
+                       weights=None, size_variety=0.0):
     """Assign each sprite a 'home' cell on a grid that fully tiles the screen at peak.
 
-    density (>=1) oversamples the grid so emotes overlap and guarantee 100% cover.
+    density (>=1) oversamples the grid so images overlap and guarantee 100% cover.
     The draw order of rng calls here is mirrored exactly by the UI preview.
     Returns (sprites, count)."""
-    # cell size smaller than emote so rotated emotes overlap and leave no gaps
+    variety = max(0.0, min(0.6, float(size_variety or 0.0)))
+    # Shrunken images open holes at the peak, so pack tighter. The 2.5 factor
+    # was picked by running the coverage check across styles and seeds; a
+    # smaller bump still let gaps through at 60% variety.
+    if variety > 0:
+        density = density * (1.0 + variety * 2.5)
+    # cell size smaller than image so rotated images overlap and leave no gaps
     cell = max(8.0, emote_px * 0.62 / max(1.0, density ** 0.5))
     cols = int(math.ceil(w / cell)) + 1
     rows = int(math.ceil(h / cell)) + 1
+    pool = expand_weights(len(emotes), weights)
     sprites = []
     for r in range(rows):
         for c in range(cols):
-            idx = rng.index(len(emotes))
+            idx = pool[rng.index(len(pool))]
             hx = c * cell + cell / 2 + rng.uniform(-cell * 0.25, cell * 0.25)
             hy = r * cell + cell / 2 + rng.uniform(-cell * 0.25, cell * 0.25)
-            sprites.append({
+            s = {
                 "em": emotes[idx],
                 "hx": hx,
                 "hy": hy,
@@ -366,7 +444,12 @@ def make_sprite_layout(emotes, w, h, emote_px, density, rng):
                 "dist": rng.uniform(0.5, 1.0),
                 "delay": rng.next(),
                 "phase": rng.next(),
-            })
+            }
+            # drawn last, and only when variety is on, so a seed rendered with
+            # variety 0 lays out exactly as it did before this option existed
+            s["sscale"] = (1.0 + variety * (rng.next() - 0.5) * 2.0
+                           if variety > 0 else 1.0)
+            sprites.append(s)
     rng.shuffle(sprites)
     return sprites, len(sprites)
 
@@ -376,8 +459,11 @@ def make_sprite_layout(emotes, w, h, emote_px, density, rng):
 # --------------------------------------------------------------------------
 # Transformed-sprite memo. resize + rotate dominate render time, so quantize
 # rotation to 15 deg and scale to ~5% relative steps and reuse the results.
-_XFORM_CACHE = {}
-_XFORM_LIMIT = 6000
+# Budgeted by bytes, not by entry count: at 4K with big images a single cached
+# bitmap can be megabytes, so counting entries let memory run away.
+_XFORM_CACHE = OrderedDict()
+_XFORM_BYTES = 0
+_XFORM_BUDGET = 150 * 1024 * 1024       # per process
 _ALPHA_LUTS = {}
 
 ROT_STEPS = 24                      # 360 / 15
@@ -394,9 +480,11 @@ def _alpha_lut(step):
 
 
 def _transformed(key, img, rot_q, scale_q):
+    global _XFORM_BYTES
     ck = (key, rot_q, scale_q)
     hit = _XFORM_CACHE.get(ck)
     if hit is not None:
+        _XFORM_CACHE.move_to_end(ck)
         return hit
     out = img
     scale = SCALE_BASE ** scale_q
@@ -407,9 +495,12 @@ def _transformed(key, img, rot_q, scale_q):
     rot = rot_q * (360.0 / ROT_STEPS)
     if rot > 0.5:
         out = out.rotate(rot, expand=True, resample=Image.BILINEAR)
-    if len(_XFORM_CACHE) >= _XFORM_LIMIT:
-        _XFORM_CACHE.clear()
     _XFORM_CACHE[ck] = out
+    _XFORM_BYTES += out.width * out.height * 4
+    # evict oldest first, keeping the entry we just made
+    while _XFORM_BYTES > _XFORM_BUDGET and len(_XFORM_CACHE) > 1:
+        _, old = _XFORM_CACHE.popitem(last=False)
+        _XFORM_BYTES -= old.width * old.height * 4
     return out
 
 
@@ -444,11 +535,23 @@ def paste_rgba(canvas, sprite_img, cx, cy, rot, alpha, scale=1.0, key=None):
 # --------------------------------------------------------------------------
 # logo overlay
 # --------------------------------------------------------------------------
-def load_logo(path, canvas_w, size_pct):
-    """Load the logo (static or animated) scaled to size_pct% of canvas width."""
-    frames, durs = _read_frames(path)
+def logo_scale(src_w, src_h, canvas_w, canvas_h, size_pct):
+    """Scale factor for the logo: size_pct% of width, but never taller than 80%
+    of the canvas. A tall logo would otherwise run off the top and bottom.
+    Mirrored by drawLogo in the UI."""
     target_w = max(8.0, canvas_w * float(size_pct) / 100.0)
-    scale = target_w / frames[0].width
+    scale = target_w / max(1, src_w)
+    max_h = canvas_h * 0.8
+    if src_h * scale > max_h:
+        scale = max_h / max(1, src_h)
+    return scale
+
+
+def load_logo(path, canvas_w, canvas_h, size_pct):
+    """Load the logo (static or animated) scaled to fit the canvas."""
+    frames, durs = _read_frames(path)
+    scale = logo_scale(frames[0].width, frames[0].height,
+                       canvas_w, canvas_h, size_pct)
     out = [fr.resize((max(1, int(fr.width * scale)), max(1, int(fr.height * scale))),
                      Image.LANCZOS) for fr in frames]
     return {"frames": out, "durations": durs, "total_ms": float(sum(durs))}
@@ -457,7 +560,7 @@ def load_logo(path, canvas_w, size_pct):
 def logo_phase(t, hold, in_frac):
     """Where the logo is in its life, or None when it isn't on screen.
 
-    The logo lives inside the hold window — the stretch where the emotes have
+    The logo lives inside the hold window — the stretch where the images have
     the screen fully covered — so it is never seen floating over a live scene.
     Returns (mode, p) with p=1 meaning fully arrived."""
     _, a, b = timing_windows(hold, in_frac)
@@ -560,7 +663,7 @@ def _rgb_split(im, px):
 
 
 def render_logo(canvas, logo, t, cfg):
-    """Composite the logo on top of the emote layer. No-op when there's none."""
+    """Composite the logo on top of the image layer. No-op when there's none."""
     if not logo:
         return
     ph = logo_phase(t, cfg["hold"], cfg["in_frac"])
@@ -626,6 +729,7 @@ def render_frame(t, sprites, cfg, logo=None):
 
     canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     cov = coverage_curve(t, hold, in_frac)
+    _, up_end, down_start = timing_windows(hold, in_frac)
     cx, cy = w / 2.0, h / 2.0
     diag = math.hypot(w, h)
 
@@ -634,20 +738,22 @@ def render_frame(t, sprites, cfg, logo=None):
         up = direction == "up"
         for s in sprites:
             img = emote_frame(s["em"], t_ms, s["phase"])
+            ss = s["sscale"]
             # Each sprite falls across the screen, passing through its own grid
             # home exactly at the transition point — so the densest moment is a
             # fully tiled screen rather than a random scatter that can leave
             # gaps. The sideways drift is zeroed at that instant for the same
             # reason.
-            vy = (h + 2 * img.height) * 1.25
+            ih = img.height * ss
+            vy = (h + 2 * ih) * 1.25
             y = s["hy"] + (t - in_frac) * (-vy if up else vy)
             wob = s["seed"] * 6.28
             x = s["hx"] + (math.sin(t * 5 + wob) - math.sin(in_frac * 5 + wob)) * 10
             rot = s["rot"] + s["spin"] * t * 2
             a = 1.0
-            if y < -img.height * 0.5 or y > h + img.height * 0.5:
+            if y < -ih * 0.5 or y > h + ih * 0.5:
                 a = 0.0
-            paste_rgba(canvas, img, x, y, rot, a, key=id(img))
+            paste_rgba(canvas, img, x, y, rot, a, scale=ss, key=id(img))
         render_logo(canvas, logo, t, cfg)
         return canvas
 
@@ -661,18 +767,33 @@ def render_frame(t, sprites, cfg, logo=None):
             # at cov=0 sprite sits near center, tiny; at cov=1 it's home, full size
             x = cx + dx * k
             y = cy + dy * k
-            scale = 0.05 + 0.95 * k
+            scale = (0.05 + 0.95 * k) * s["sscale"]
             rot = s["rot"] + s["spin"] * (1 - cov)
             a = min(1.0, cov * 1.6)
             paste_rgba(canvas, img, x, y, rot, a, scale=scale, key=id(img))
         render_logo(canvas, logo, t, cfg)
         return canvas
 
+    # ---- popcorn: no travel at all, each image pops in where it lands ----
+    if style == "popcorn":
+        for s in sprites:
+            img = emote_frame(s["em"], t_ms, s["phase"])
+            cov_s = stagger(cov, s["delay"])
+            k = ease(cov_s)
+            scale = max(0.0, pop_scale(k)) * s["sscale"]
+            a = min(1.0, cov_s * 3.0)
+            paste_rgba(canvas, img, s["hx"], s["hy"], s["rot"], a,
+                       scale=scale, key=id(img))
+        render_logo(canvas, logo, t, cfg)
+        return canvas
+
     # ---- converge-family: all share the far->home interpolation ----
     for s in sprites:
         img = emote_frame(s["em"], t_ms, s["phase"])
-        iw, ih = img.width, img.height
+        ss = s["sscale"]
+        iw, ih = img.width * ss, img.height * ss
         hx, hy = s["hx"], s["hy"]
+        off_x = off_y = 0.0
 
         # per-sprite coverage: most styles move as one, wipe and rain stagger
         if style == "wipe":
@@ -702,6 +823,29 @@ def render_frame(t, sprites, cfg, logo=None):
                 far_x, far_y = hx - (w + iw) * reach, hy
             else:  # down
                 far_x, far_y = hx, hy - (h + ih) * reach
+        elif style == "wave":
+            # slides in like a wall, staggered along the travel axis, with a
+            # sine ripple across the perpendicular axis that flattens on arrival
+            hxn, hyn = hx / w, hy / h
+            if direction == "left":
+                far_x, far_y = hx + (w + iw) * 1.3, hy
+                delay = 1.0 - hxn
+            elif direction == "up":
+                far_x, far_y = hx, hy + (h + ih) * 1.3
+                delay = 1.0 - hyn
+            elif direction == "down":
+                far_x, far_y = hx, hy - (h + ih) * 1.3
+                delay = hyn
+            else:  # right
+                far_x, far_y = hx - (w + iw) * 1.3, hy
+                delay = hxn
+            cov_s = stagger(cov, clamp01(delay))
+            if direction in ("left", "right"):
+                off_y = (math.sin(hxn * 4 * math.pi + t * 6)
+                         * h * 0.08 * (1.0 - cov_s))
+            else:
+                off_x = (math.sin(hyn * 4 * math.pi + t * 6)
+                         * w * 0.08 * (1.0 - cov_s))
         else:
             cov_s = cov
 
@@ -756,15 +900,31 @@ def render_frame(t, sprites, cfg, logo=None):
             r = dist + (1 - cov_s) * diag * 0.5
             far_x = cx + math.cos(ang) * r
             far_y = cy + math.sin(ang) * r
-        elif style not in ("rain", "wipe", "swipe"):
+        elif style == "shatter":
+            # comes together like burst; the exit is handled below
+            ang = s["ang"]
+            r = diag * (0.6 + 0.6 * s["dist"])
+            far_x = cx + math.cos(ang) * r
+            far_y = cy + math.sin(ang) * r
+        elif style not in ("rain", "wipe", "swipe", "wave"):
             far_x, far_y = hx, hy
 
         k = ease(cov_s)
-        x = far_x + (hx - far_x) * k
-        y = far_y + (hy - far_y) * k
+        x = far_x + (hx - far_x) * k + off_x
+        y = far_y + (hy - far_y) * k + off_y
         rot = s["rot"] + s["spin"] * (1 - cov_s)
         a = min(1.0, cov_s * 1.6)
-        paste_rgba(canvas, img, x, y, rot, a, key=id(img))
+
+        # ---- shatter exit: the wall breaks and the pieces fall ----
+        if style == "shatter" and t > down_start:
+            u = (t - down_start) / max(1e-6, 1.0 - down_start)
+            drift = diag * 0.35 * s["dist"]
+            x = hx + math.cos(s["ang"]) * drift * u
+            y = hy + math.sin(s["ang"]) * drift * u + diag * 1.25 * u * u
+            rot = s["rot"] + s["spin"] * u * 3.0
+            a = 1.0
+
+        paste_rgba(canvas, img, x, y, rot, a, scale=ss, key=id(img))
 
     render_logo(canvas, logo, t, cfg)
     return canvas
@@ -779,17 +939,25 @@ _W = {}
 
 
 def _init_worker(cfg):
-    emotes = load_emotes(
-        cfg["images"], cfg["emote_px"],
-        outline=cfg["outline"], outline_color=cfg["outline_color"],
-        shadow=cfg["shadow"])
+    # Effects were already baked by the parent and written out as PNGs, so a
+    # worker just reads finished frames — no outline or shadow work repeated.
+    baked = cfg.get("baked")
+    if baked:
+        emotes = load_baked_emotes(baked)
+    else:
+        emotes = load_emotes(
+            cfg["images"], cfg["emote_px"],
+            outline=cfg["outline"], outline_color=cfg["outline_color"],
+            shadow=cfg["shadow"])
     rng = Rng(cfg["seed"])
     sprites, _ = make_sprite_layout(
         emotes, cfg["width"], cfg["height"], cfg["emote_px"],
-        cfg["layout_density"], rng)
+        cfg["layout_density"], rng,
+        weights=cfg.get("weights"), size_variety=cfg.get("size_variety", 0.0))
     _W["cfg"] = cfg
     _W["sprites"] = sprites
-    _W["logo"] = (load_logo(cfg["logo_path"], cfg["width"], cfg["logo_size"])
+    _W["logo"] = (load_logo(cfg["logo_path"], cfg["width"], cfg["height"],
+                            cfg["logo_size"])
                   if cfg.get("logo_path") else None)
 
 
@@ -812,7 +980,27 @@ def _render_bytes(i, sprites, cfg, logo=None):
 # --------------------------------------------------------------------------
 # encoding
 # --------------------------------------------------------------------------
-def ffmpeg_cmd(fmt, w, h, fps, out, quality, audio):
+def audio_filters(duration, volume=1.0, fade_out=False):
+    """Build the -af chain for the muxed sound.
+
+    apad is the important one: without it a sound shorter than the stinger
+    would end the whole file early, because -shortest cuts at the first stream
+    to run out. Padding with silence means the video length always wins.
+    """
+    chain = []
+    volume = max(0.0, float(volume if volume is not None else 1.0))
+    if abs(volume - 1.0) > 1e-3:
+        chain.append(f"volume={volume:.4f}")
+    if fade_out and duration and duration > 0:
+        st = duration * 0.75
+        d = duration * 0.25
+        chain.append(f"afade=t=out:st={st:.4f}:d={d:.4f}")
+    chain.append("apad")
+    return ",".join(chain)
+
+
+def ffmpeg_cmd(fmt, w, h, fps, out, quality, audio,
+               duration=None, volume=1.0, fade_out=False):
     cmd = [FFMPEG, "-y", "-hide_banner", "-loglevel", "error", "-nostats",
            "-f", "rawvideo", "-pix_fmt", "rgba",
            "-s", f"{w}x{h}", "-framerate", str(fps), "-i", "-"]
@@ -834,6 +1022,7 @@ def ffmpeg_cmd(fmt, w, h, fps, out, quality, audio):
         # opus is a webm codec; mov needs aac
         cmd += (["-c:a", "aac", "-b:a", "192k"] if fmt == "mov"
                 else ["-c:a", "libopus", "-b:a", "128k"])
+        cmd += ["-af", audio_filters(duration, volume, fade_out)]
         cmd += ["-shortest"]
     # without this the muxer stamps a random SegmentUID and the encoder date,
     # so the same seed would produce files that differ byte-wise
@@ -851,7 +1040,9 @@ def build(images, out, style="rain", width=1920, height=1080, fps=30,
           quality=28, audio=None, fmt="webm", outline=0,
           outline_color="#000000", shadow=False,
           logo=None, logo_size=22.0, logo_anchor="mc", logo_dx=0.0,
-          logo_dy=0.0, logo_in="pop", logo_out=None, progress=None):
+          logo_dy=0.0, logo_in="pop", logo_out=None,
+          size_variety=0.0, weights=None, volume=1.0, fade_out=False,
+          progress=None):
     """Render a stinger. Returns a dict with the transition point and metadata.
 
     progress(stage, done, total): optional callback. stage is 'render' or
@@ -874,7 +1065,7 @@ def build(images, out, style="rain", width=1920, height=1080, fps=30,
     seed = int(seed) % 4294967296
 
     n_frames = max(2, int(round(fps * duration)))
-    # downpour has inherent gaps between falling emotes, so pack it denser
+    # downpour has inherent gaps between falling images, so pack it denser
     # internally to keep the screen covered at the transition point.
     layout_density = density * 1.5 if style == "downpour" else density
     in_frac, _, _ = timing_windows(hold, in_frac)
@@ -895,29 +1086,43 @@ def build(images, out, style="rain", width=1920, height=1080, fps=30,
         "logo_dx": float(logo_dx), "logo_dy": float(logo_dy),
         "logo_in": logo_in if logo_in in LOGO_ANIMS else "pop",
         "logo_out": logo_out if logo_out in LOGO_ANIMS else None,
+        "size_variety": max(0.0, min(0.6, float(size_variety or 0.0))),
+        "weights": list(weights) if weights else None,
     }
 
+    # Bake outline/shadow exactly once, here, and hand the workers finished
+    # PNGs. Doing it in every worker as well was up to 9x the same work.
     emotes = load_emotes(images, emote_px, outline=cfg["outline"],
                          outline_color=outline_color, shadow=cfg["shadow"])
-    sprites, count = make_sprite_layout(
-        emotes, width, height, emote_px, layout_density, Rng(seed))
-    logo_obj = load_logo(logo, width, logo_size) if logo else None
+    bake_dir = tempfile.mkdtemp(prefix="stinger_bake_")
+    try:
+        cfg["baked"] = bake_emotes_to_disk(emotes, bake_dir)
 
-    transition_ms = int(round(n_frames * in_frac / fps * 1000))
-    nproc = max(1, min(cpu_count(), 8))
-    use_pool = nproc > 1 and n_frames > 3
+        sprites, count = make_sprite_layout(
+            emotes, width, height, emote_px, layout_density, Rng(seed),
+            weights=cfg["weights"], size_variety=cfg["size_variety"])
+        logo_obj = load_logo(logo, width, height, logo_size) if logo else None
 
-    report("render", 0, n_frames)
+        transition_ms = int(round(n_frames * in_frac / fps * 1000))
+        nproc = max(1, min(cpu_count(), 8))
+        use_pool = nproc > 1 and n_frames > 3
 
-    if fmt == "png":
-        _build_png_sequence(out, cfg, sprites, nproc, use_pool, report, logo_obj)
-    else:
-        _build_video(out, cfg, sprites, nproc, use_pool, report,
-                     fps, quality, audio, fmt, logo_obj)
+        report("render", 0, n_frames)
+
+        if fmt == "png":
+            _build_png_sequence(out, cfg, sprites, nproc, use_pool, report,
+                                logo_obj)
+        else:
+            _build_video(out, cfg, sprites, nproc, use_pool, report,
+                         fps, quality, audio, fmt, logo_obj,
+                         duration=duration, volume=volume, fade_out=fade_out)
+    finally:
+        shutil.rmtree(bake_dir, ignore_errors=True)
 
     return {"out": out, "transition_ms": transition_ms, "frames": n_frames,
             "count": count, "seed": seed, "format": fmt,
-            "direction": cfg["direction"]}
+            "direction": cfg["direction"],
+            "audio_dropped": bool(audio) and fmt == "png"}
 
 
 def _frame_stream(cfg, sprites, nproc, use_pool, report, logo=None):
@@ -939,8 +1144,10 @@ def _frame_stream(cfg, sprites, nproc, use_pool, report, logo=None):
 
 
 def _build_video(out, cfg, sprites, nproc, use_pool, report,
-                 fps, quality, audio, fmt, logo=None):
-    cmd = ffmpeg_cmd(fmt, cfg["width"], cfg["height"], fps, out, quality, audio)
+                 fps, quality, audio, fmt, logo=None,
+                 duration=None, volume=1.0, fade_out=False):
+    cmd = ffmpeg_cmd(fmt, cfg["width"], cfg["height"], fps, out, quality, audio,
+                     duration=duration, volume=volume, fade_out=fade_out)
     # stderr goes to a file, not a pipe: nothing reads it while we are busy
     # feeding frames, and a full pipe buffer would deadlock the encoder.
     log = tempfile.TemporaryFile()
@@ -993,8 +1200,8 @@ def _build_png_sequence(out, cfg, sprites, nproc, use_pool, report, logo=None):
 # CLI
 # --------------------------------------------------------------------------
 def main():
-    ap = argparse.ArgumentParser(description="Make OBS WebM stinger transitions from emote images.")
-    ap.add_argument("--images", nargs="+", required=True, help="emote image files (PNG/GIF/WebP; transparency ideal)")
+    ap = argparse.ArgumentParser(description="Make OBS WebM stinger transitions from a set of images.")
+    ap.add_argument("--images", nargs="+", required=True, help="image files (PNG/GIF/WebP; transparency ideal)")
     ap.add_argument("--out", default="stinger.webm")
     ap.add_argument("--style", choices=STYLES, default="rain")
     ap.add_argument("--width", type=int, default=1920)
@@ -1004,18 +1211,26 @@ def main():
     ap.add_argument("--hold", type=float, default=0.08, help="fraction of timeline held fully covered (0-0.5)")
     ap.add_argument("--in-frac", type=float, default=0.5, dest="in_frac",
                     help="where peak coverage lands, 0.2-0.8 (0.5 = halfway)")
-    ap.add_argument("--density", type=float, default=2.0, help="coverage multiplier; higher = more emotes / fuller cover")
-    ap.add_argument("--emote-px", type=int, default=160, help="emote size in px (longest side)")
+    ap.add_argument("--density", type=float, default=2.0, help="coverage multiplier; higher = more images / fuller cover")
+    ap.add_argument("--emote-px", type=int, default=160, help="image size in px (longest side)")
     ap.add_argument("--direction", choices=DIRECTIONS, default=None,
                     help="travel direction for rain/swipe/wipe/rows/columns/downpour")
     ap.add_argument("--easing", choices=EASINGS, default="smooth")
     ap.add_argument("--quality", type=int, default=28, help="VP9 crf, 18 (best) - 40 (smallest)")
     ap.add_argument("--audio", default=None, help="optional audio file to mux in")
+    ap.add_argument("--volume", type=float, default=100.0,
+                    help="sound level in %% (100 = unchanged)")
+    ap.add_argument("--fade-out", action="store_true", dest="fade_out",
+                    help="fade the sound out over the last quarter of the clip")
+    ap.add_argument("--size-variety", type=float, default=0.0, dest="size_variety",
+                    help="per-image size spread in %% (0-60, 0 = every image the same)")
+    ap.add_argument("--weights", type=int, nargs="+", default=None,
+                    help="how often each image is picked, one number per --images entry")
     ap.add_argument("--format", choices=FORMATS, default="webm", dest="fmt",
                     help="webm (VP9 alpha), mov (ProRes 4444), png (zipped sequence)")
     ap.add_argument("--outline", type=int, default=0, help="outline width in px (0 = off)")
     ap.add_argument("--outline-color", default="#000000")
-    ap.add_argument("--shadow", action="store_true", help="soft drop shadow on each emote")
+    ap.add_argument("--shadow", action="store_true", help="soft drop shadow on each image")
     ap.add_argument("--logo", default=None, help="optional logo image that lands at the transition point")
     ap.add_argument("--logo-size", type=float, default=22.0, help="logo width as %% of the canvas")
     ap.add_argument("--logo-anchor", choices=LOGO_ANCHORS, default="mc",
@@ -1039,6 +1254,12 @@ def main():
     if args.logo and not os.path.isfile(args.logo):
         print(f"missing logo: {args.logo}", file=sys.stderr)
         sys.exit(1)
+    if args.weights and len(args.weights) != len(args.images):
+        print("--weights needs one number per image", file=sys.stderr)
+        sys.exit(1)
+    if args.audio and args.fmt == "png":
+        print("note: a PNG sequence has no audio track, so the sound is skipped",
+              file=sys.stderr)
 
     out = args.out
     want = EXT[args.fmt]
@@ -1057,8 +1278,10 @@ def main():
         logo=args.logo, logo_size=args.logo_size, logo_anchor=args.logo_anchor,
         logo_dx=args.logo_dx, logo_dy=args.logo_dy,
         logo_in=args.logo_in, logo_out=args.logo_out,
+        size_variety=args.size_variety / 100.0, weights=args.weights,
+        volume=args.volume / 100.0, fade_out=args.fade_out,
     )
-    print(f"wrote {r['out']}  ({r['frames']} frames, {r['count']} emotes, "
+    print(f"wrote {r['out']}  ({r['frames']} frames, {r['count']} sprites, "
           f"style={args.style}, seed={r['seed']})")
     print(f"OBS transition point: {r['transition_ms']} ms")
 

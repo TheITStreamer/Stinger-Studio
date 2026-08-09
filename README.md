@@ -1,8 +1,9 @@
 # Stinger Studio — desktop app
 
-A windowed app for making OBS stinger transitions out of emotes. Load images, set
-size and amount with sliders, pick a style, hit **Generate**, save the file. The
-default output is a transparent VP9 WebM that drops straight into OBS.
+A windowed app for making OBS stinger transitions out of any images you like —
+emotes, logos, stickers, screenshots, whatever. Drop them in, set size and amount
+with sliders, pick a style, hit **Generate**, save the file. The default output
+is a transparent VP9 WebM that drops straight into OBS.
 
 There are two stages: **you build the .exe once**, then **anyone runs the .exe with
 nothing to install**.
@@ -41,8 +42,8 @@ Then run `build.bat` again — it'll skip the download.
 ## Part 2 — Use it (you or anyone)
 
 1. Double-click **`StingerStudio.exe`**. A window opens. Nothing to install.
-2. Drag your emotes into the box. PNGs with transparent backgrounds look best,
-   and **animated GIF / WebP** work too — each emote plays as it falls.
+2. Drag your images into the box. PNGs with transparent backgrounds look best,
+   and **animated GIF / WebP** work too — each image plays as it falls.
 3. Pick a **style**, then use the controls (below).
 4. Watch the live preview. The checkerboard = transparent (your live scene shows
    through there). The preview uses the same seed and the same motion maths as
@@ -57,8 +58,12 @@ Then run `build.bat` again — it'll skip the download.
 
 **Adjust**
 
-- **Emote size** — how big each emote is.
+- **Image size** — how big each image is.
 - **Amount** — how densely they flood the screen.
+- **Size variety** — 0 to 60%. Gives every image its own size within that spread
+  so the wall looks less uniform. The app packs the layout tighter to match, so
+  the screen is still fully covered at the transition point. At 0 it is off and
+  a seed lays out exactly as it did before this setting existed.
 - **Duration** — total length of the clip.
 - **Hold** — how long the screen stays fully covered at the peak.
 - **Transition point** — where in the clip the screen is fully covered, as a
@@ -68,11 +73,16 @@ Then run `build.bat` again — it'll skip the download.
   `linear`, `overshoot` (passes home by ~8% then settles), `bounce`.
 
 **Direction** — appears for the styles that can be aimed: `rain`, `swipe`,
-`wipe`, `rows`, `columns`, `downpour`. It always means *which way the emotes
-travel* — so `rain` + `up` floats them upward, and for `rows`/`columns` it picks
-which side the even lines come from.
+`wipe`, `wave`, `rows`, `columns`, `downpour`. It always means *which way the
+images travel* — so `rain` + `up` floats them upward, and for `rows`/`columns`
+it picks which side the even lines come from.
 
-**Logo** — an optional logo that lands on top of the emotes at the moment the
+**Image weighting** — click any thumbnail to cycle it between 1×, 2× and 3×. A
+badge shows the setting. A 3× image turns up three times as often as a 1× one.
+The × button still removes the image. Weights last for the session and are not
+saved into presets.
+
+**Logo** — an optional logo that lands on top of the images at the moment the
 screen is fully covered, then leaves with them. Load any image (animated GIF /
 WebP work too) and you get:
 
@@ -84,38 +94,60 @@ WebP work too) and you get:
 - **Exit** — defaults to the entry animation reversed; pick a different one if
   you want it to leave differently than it arrived.
 
-The logo is only ever on screen while the emotes have the screen fully covered,
+The logo is only ever on screen while the images have the screen fully covered,
 so it never floats over your live scene, and it can't affect the transition
 point. Because of that its screen time comes out of **Hold** — loading a logo
 raises Hold to 0.26 automatically if it's lower, otherwise the logo would only
 flash for two or three frames.
 
-**Emote effects** — applied once when the emotes load, so they cost nothing per
+**Image effects** — applied once when the images load, so they cost nothing per
 frame:
 
-- **Outline** — a 1–4 px coloured stroke around each emote, with a colour picker.
-- **Drop shadow** — a soft shadow behind each emote.
+- **Outline** — a 1–4 px coloured stroke around each image, with a colour picker.
+- **Drop shadow** — a soft shadow behind each image.
 
 **Output**
 
-- **Resolution** — 1920×1080, 2560×1440 or 1280×720.
+- **Resolution** — 1920×1080, 2560×1440, 3840×2160 (4K) or 1280×720.
 - **FPS** — 24, 30, 48, 60, 90 or 120.
 - **Quality** — VP9 crf from 18 (best looking, biggest file) to 40 (smallest).
   28 is a good default.
 - **Format** — see below.
-- **Sound** — optional audio file (mp3/wav/ogg) muxed into the clip. It's
-  trimmed to the video length; if it's shorter, it just ends.
+- **Sound** — optional audio file (mp3/wav/ogg) muxed into the clip. A sound
+  longer than the clip is trimmed; a shorter one is padded with silence, so the
+  video is never cut short. A PNG sequence has no audio track, so the app says
+  so and skips the sound.
+- **Volume** — 0 to 100%. Applies to the live preview and to the saved file.
+- **Fade out** — fades the sound down across the last quarter of the clip.
 - **Seed** — the number that decides the random layout. The same seed and the
   same settings always produce the exact same file. Hit 🎲 to roll a new one.
 
-**Presets** — save every setting (not the emotes themselves) under a name and
-recall it later. Four are built in: *Fast punch*, *Slow flood*, *Curtain wipe*,
-*Chaos bounce*. Your own are stored in `%APPDATA%\StingerStudio\presets.json`
-and survive restarts.
+Under the Generate button there's a passive line like *"72 frames at 1920×1080 —
+about 3 MB"*. It's a rough guess that updates as you move the sliders, and it
+turns red past 400 frames to warn you the render will take a while.
+
+**Sound in the preview** — load a sound and it plays along with the live
+preview, restarting each loop, with the volume and fade you've set. Scrubbing or
+pausing stops it.
+
+**Copy** — next to the transition point readout and in the result panel. Puts
+just the millisecond number on the clipboard so you can paste it into OBS.
+
+**Presets** — save every setting (not the images themselves) under a name and
+recall it later. Six are built in: *Fast punch*, *Slow flood*, *Curtain wipe*,
+*Chaos bounce*, *Popcorn pop*, *Glass break*. Your own are stored in
+`%APPDATA%\StingerStudio\presets.json` and survive restarts. Volume and fade-out
+are saved with a preset; size variety and image weights are not.
 
 **Render all styles** — renders your current settings once per style, shows
-overall progress, then **Save all…** copies all twelve out to a folder you pick,
-named `stinger_<style>.<ext>`. The emotes are only uploaded once.
+overall progress, then **Save all…** copies all fifteen out to a folder you
+pick, named `stinger_<style>.<ext>`. The images are only sent to the renderer
+once — after that they're addressed by content hash, so a second Generate with
+the same images transfers no image data at all.
+
+**Saving** — the save dialog opens in whatever folder you used last, remembered
+across restarts in `%APPDATA%\StingerStudio\settings.json`. After a save an
+**Open folder** button appears in the result panel.
 
 ---
 
@@ -131,7 +163,7 @@ named `stinger_<style>.<ext>`. The emotes are only uploaded once.
 
 ## Styles
 
-- **rain** — emotes pour down from above, fill, then fall away
+- **rain** — images pour down from above, fill, then fall away
 - **burst** — explode out from center, then implode
 - **swipe** — a wall sweeps across and back
 - **spiral** — spiral inward to cover, spiral out
@@ -140,14 +172,20 @@ named `stinger_<style>.<ext>`. The emotes are only uploaded once.
 - **columns** — alternating vertical lines slide in from top and bottom
 - **downpour** — a continuous fall with no pause, packing the screen at the
   transition point
-- **zoom** — emotes rush toward you from a point, scaling up to fill
+- **zoom** — images rush toward you from a point, scaling up to fill
 - **wipe** — a staggered diagonal band sweeps across like a curtain pull, each
-  emote arriving a beat after the one behind it
-- **shockwave** — emotes ripple outward from center in concentric rings
+  image arriving a beat after the one behind it
+- **shockwave** — images ripple outward from center in concentric rings
 - **vortex** — everything spins into the center and drains away, then back out
+- **popcorn** — nothing travels. Each image pops into place where it lands, with
+  a little overshoot, on its own beat, and pops back out the same way
+- **wave** — a wall slides in from one side with a sine ripple running across it
+  that flattens out as the images settle. Takes a direction
+- **shatter** — comes together like `burst`, but the exit breaks apart: each
+  piece picks up gravity and spin and drops off the bottom of the screen
 
-All styles fully cover the screen at the transition point, so the cut between
-scenes is always hidden.
+That's fifteen. All of them fully cover the screen at the transition point, so
+the cut between scenes is always hidden.
 
 ---
 
@@ -156,32 +194,37 @@ scenes is always hidden.
 The engine runs standalone, with every option the app exposes:
 
 ```
-python engine.py --images a.png b.gif c.webp --style wipe --out stinger.webm \
+python engine.py --images a.png b.gif c.webp --style wave --out stinger.webm \
     --width 1920 --height 1080 --fps 60 --duration 1.2 \
     --hold 0.08 --in-frac 0.5 --density 2.0 --emote-px 160 \
+    --size-variety 30 --weights 3 1 2 \
     --direction right --easing overshoot --quality 28 \
     --outline 3 --outline-color "#ffffff" --shadow \
     --logo logo.png --logo-size 30 --logo-anchor mc --logo-in pop \
-    --audio whoosh.mp3 --format webm --seed 12345
+    --audio whoosh.mp3 --volume 80 --fade-out --format webm --seed 12345
 ```
 
 | flag | meaning |
 |------|---------|
-| `--images` | emote files (PNG / GIF / WebP), space separated — required |
+| `--images` | image files (PNG / GIF / WebP), space separated — required |
 | `--out` | output path; the extension is corrected to match `--format` |
-| `--style` | one of the twelve styles above |
+| `--style` | one of the fifteen styles above |
 | `--width` / `--height` / `--fps` / `--duration` | clip geometry and length |
 | `--hold` | fraction of the timeline held fully covered |
 | `--in-frac` | where peak coverage lands, 0.2–0.8 (0.5 = halfway) |
-| `--density` | coverage multiplier; higher = more emotes |
-| `--emote-px` | emote size in px (longest side) |
+| `--density` | coverage multiplier; higher = more images |
+| `--emote-px` | image size in px (longest side) — old name, kept so existing scripts keep working |
+| `--size-variety` | per-image size spread in %, 0–60 (0 = every image the same) |
+| `--weights` | how often each image is picked, one number per `--images` entry |
 | `--direction` | `left`, `right`, `up` or `down` for the directional styles |
 | `--easing` | `smooth`, `linear`, `overshoot`, `bounce` |
 | `--quality` | VP9 crf, 18 (best) to 40 (smallest) |
 | `--audio` | audio file to mux in |
+| `--volume` | sound level in %, 100 = unchanged |
+| `--fade-out` | fade the sound out over the last quarter of the clip |
 | `--format` | `webm`, `mov` or `png` |
-| `--outline` / `--outline-color` | emote stroke width in px and its colour |
-| `--shadow` | soft drop shadow on each emote |
+| `--outline` / `--outline-color` | image stroke width in px and its colour |
+| `--shadow` | soft drop shadow on each image |
 | `--logo` | logo image to land at the transition point |
 | `--logo-size` | logo width as a % of the canvas (default 22) |
 | `--logo-anchor` | `tl` `tc` `tr` `ml` `mc` `mr` `bl` `bc` `br` (default `mc`) |
@@ -211,6 +254,8 @@ It prints the OBS transition point and the seed it used.
 - Frames are piped straight into ffmpeg instead of being written out as PNGs
   first, and rendering runs on every core — including in the built exe, which
   used to fall back to a single core.
+- Outline and shadow are baked once in the main process and handed to the render
+  workers as finished images, rather than every worker redoing the same work.
 - The preview is a fast approximation of the final *look*, but no longer of the
   *layout*: it runs the same seeded generator as the engine, so sprites land in
   the same places.
