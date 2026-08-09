@@ -4,6 +4,7 @@ Make OBS stinger transitions out of your own images. Drop in emotes, logos, stic
 or anything else, pick a style, hit Generate. Out comes a transparent WebM that goes
 straight into OBS. Everything runs locally on your PC.
 <img width="1166" height="813" alt="image" src="https://github.com/user-attachments/assets/ad5a0a80-f1a5-4da9-8a15-ad074a2ca875" />
+<img width="1166" height="813" alt="image" src="https://github.com/user-attachments/assets/245fad5b-8d2f-4876-8b69-c2668cb32f5f" />
 
 ## A.I Disclaimer
 
