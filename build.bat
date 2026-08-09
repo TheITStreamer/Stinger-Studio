@@ -70,6 +70,18 @@ if exist "bin\ffmpeg.exe" (
   echo [OK] ffmpeg ready.
 )
 
+REM --- 3b. build the exe icon from S.png ---
+if exist "S.png" (
+  !PY! make_icon.py >> "%LOG%" 2>&1
+  if errorlevel 1 (
+    echo [..] Icon build failed, using whatever icon.ico is already there.
+  ) else (
+    echo [OK] Icon ready.
+  )
+) else (
+  echo [..] No S.png found, skipping the icon step.
+)
+
 REM --- 4. build ---
 echo.
 echo Building the exe with PyInstaller...

@@ -74,6 +74,9 @@ python.org, tick **Add python.exe to PATH** on the first installer screen, then 
 click **build.bat**. It installs what it needs, downloads ffmpeg and builds the app.
 You end up with `dist\StingerStudio.exe`, which is the whole app with ffmpeg inside it.
 
+The exe icon comes from `S.png`. Swap that file for your own and build again, or run
+`python make_icon.py` to rebuild `icon.ico` on its own.
+
 ## Use it
 
 1. Double click **StingerStudio.exe**. Nothing to install, it just opens.

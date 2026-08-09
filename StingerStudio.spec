@@ -20,6 +20,10 @@ datas = [
 if os.path.isfile(os.path.join('bin', 'ffmpeg.exe')):
     datas.append(('bin/ffmpeg.exe', 'bin'))
 
+# icon.ico is built from S.png by make_icon.py, which build.bat runs.
+# A missing icon is not fatal, the build just falls back to the default one.
+icon_file = 'icon.ico' if os.path.isfile('icon.ico') else None
+
 a = Analysis(
     ['app.py'],
     pathex=[],
@@ -45,5 +49,5 @@ exe = EXE(
     runtime_tmpdir=None,
     console=False,           # windowed app, no console box
     disable_windowed_traceback=False,
-    icon=None,
+    icon=icon_file,
 )
