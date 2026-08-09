@@ -39,6 +39,7 @@ APP_VERSION = "1.0.0"
 
 REPO = "TheITStreamer/Stinger-Studio"
 RELEASES_API = f"https://api.github.com/repos/{REPO}/releases/latest"
+RELEASES_LIST = f"https://api.github.com/repos/{REPO}/releases?per_page=20"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
 # open_url only ever opens links on this host, so a bad reply from the API
 # can't be used to send someone somewhere else
@@ -159,37 +160,64 @@ class Api:
     def version(self):
         return {"version": APP_VERSION, "releases": RELEASES_PAGE}
 
+    @staticmethod
+    def _get_json(url):
+        req = urllib.request.Request(url, headers={
+            "User-Agent": f"StingerStudio/{APP_VERSION}",
+            "Accept": "application/vnd.github+json",
+        })
+        with urllib.request.urlopen(req, timeout=6) as r:
+            return json.load(r)
+
     def check_update(self):
         """Ask GitHub for the newest release and say whether it beats this one.
 
-        Never raises and never blocks the UI for long: a missing network, a
-        rate limit or a repo with no releases yet all just come back as
-        {"ok": False} and the banner stays hidden."""
+        Never raises and never blocks the UI for long. Anything that goes wrong
+        comes back as {"ok": False} with a plain reason, so the banner stays
+        hidden but the version chip can still tell you what happened."""
+        data = None
+        why = ""
         try:
-            req = urllib.request.Request(RELEASES_API, headers={
-                "User-Agent": f"StingerStudio/{APP_VERSION}",
-                "Accept": "application/vnd.github+json",
-            })
-            with urllib.request.urlopen(req, timeout=6) as r:
-                data = json.load(r)
-            tag = (data.get("tag_name") or "").strip()
-            if not tag:
-                return {"ok": True, "update": False, "current": APP_VERSION}
-            newer = parse_version(tag) > parse_version(APP_VERSION)
-            url = data.get("html_url") or RELEASES_PAGE
-            if not url.startswith(ALLOWED_URL_PREFIX):
-                url = RELEASES_PAGE
-            return {
-                "ok": True,
-                "update": bool(newer),
-                "current": APP_VERSION,
-                "latest": tag.lstrip("vV"),
-                "tag": tag,
-                "url": url,
-                "skipped": self._read_settings().get("skipUpdate") == tag,
-            }
+            data = self._get_json(RELEASES_API)
         except Exception as e:
-            return {"ok": False, "error": str(e)}
+            why = str(e)
+
+        # /releases/latest ignores pre-releases and drafts, so a test release
+        # marked pre-release looks exactly like no release at all. Fall back to
+        # the full list and take the highest version number in it.
+        if not data:
+            try:
+                items = [i for i in (self._get_json(RELEASES_LIST) or [])
+                         if not i.get("draft")]
+                if items:
+                    data = max(items, key=lambda i: parse_version(
+                        i.get("tag_name") or ""))
+                    why = ""
+            except Exception as e:
+                why = why or str(e)
+
+        if not data:
+            if "404" in why:
+                why = ("No releases found. A private repo, or a release still "
+                       "saved as a draft, both look like this.")
+            return {"ok": False, "error": why or "No releases found."}
+
+        tag = (data.get("tag_name") or "").strip()
+        if not tag:
+            return {"ok": False, "error": "That release has no tag."}
+        url = data.get("html_url") or RELEASES_PAGE
+        if not url.startswith(ALLOWED_URL_PREFIX):
+            url = RELEASES_PAGE
+        return {
+            "ok": True,
+            "update": parse_version(tag) > parse_version(APP_VERSION),
+            "current": APP_VERSION,
+            "latest": tag.lstrip("vV"),
+            "tag": tag,
+            "url": url,
+            "prerelease": bool(data.get("prerelease")),
+            "skipped": self._read_settings().get("skipUpdate") == tag,
+        }
 
     def skip_update(self, tag):
         """Remember that this version was dismissed so it stops nagging."""

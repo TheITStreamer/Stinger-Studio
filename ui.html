@@ -124,7 +124,9 @@
   .updatebar .later{background:none;border:1px solid var(--line);color:var(--dim);
     padding:6px 11px;border-radius:7px;cursor:pointer;font-size:12px}
   .updatebar .later:hover{color:var(--txt);border-color:var(--acc2)}
-  .ver{font-size:11px;color:var(--dim);font-family:var(--mono)}
+  .ver{font-size:11px;color:var(--dim);font-family:var(--mono);cursor:pointer}
+  .ver:hover{color:var(--acc2)}
+  .ver.bad{color:var(--bad)}
 
   .note{font-size:11px;color:var(--dim);line-height:1.6}
   .note b{color:var(--txt)}
@@ -145,7 +147,7 @@
 <header>
   <h1>Stinger Studio<span class="dot">.</span></h1>
   <span class="sub">OBS stinger transitions from your images</span>
-  <span class="ver" id="ver"></span>
+  <span class="ver" id="ver" title="Click to check for updates"></span>
   <span class="status" id="status">checking…</span>
 </header>
 
@@ -362,26 +364,50 @@ window.addEventListener('pywebviewready', async ()=>{
 });
 
 // ---- version + update banner ----
-let updateInfo=null;
+let updateInfo=null, myVersion="";
 async function showVersion(){
   try{
     const v=await window.pywebview.api.version();
-    if(v&&v.version)$("ver").textContent="v"+v.version;
+    if(v&&v.version){myVersion=v.version;$("ver").textContent="v"+v.version;}
   }catch(e){}
 }
-// Asks GitHub for the newest release once at startup. If anything goes wrong,
-// no network, no releases yet, rate limited, the banner just stays hidden.
-async function checkUpdate(){
-  try{
-    const r=await window.pywebview.api.check_update();
-    if(!r||!r.ok||!r.update||r.skipped)return;
-    updateInfo=r;
-    $("updateTag").textContent="v"+r.latest;
-    $("updateText").textContent="Version "+r.latest+" is out.";
-    $("updateSub").textContent="You are on "+r.current+".";
-    $("updateBar").classList.add("show");
-  }catch(e){}
+function verSays(msg,bad){
+  $("ver").textContent=msg;
+  $("ver").classList.toggle("bad",!!bad);
+  clearTimeout(verSays.t);
+  verSays.t=setTimeout(()=>{
+    $("ver").textContent=myVersion?"v"+myVersion:"";
+    $("ver").classList.remove("bad");
+  },5000);
 }
+// Runs once at startup, and again whenever the version chip is clicked.
+// On startup a failure stays quiet. On a click it says what went wrong, so
+// there is a way to tell a missing release from a missing network.
+async function checkUpdate(loud){
+  if(loud)verSays("checking…");
+  let r=null;
+  try{ r=await window.pywebview.api.check_update(); }
+  catch(e){ if(loud)verSays("bridge error",true); return; }
+  if(!r||!r.ok){
+    if(loud){
+      verSays("check failed",true);
+      $("ver").title=(r&&r.error)||"Could not reach GitHub.";
+    }
+    return;
+  }
+  if(!r.update){
+    if(loud)verSays("up to date");
+    return;
+  }
+  // a dismissed version stays dismissed on startup, but a click shows it again
+  if(r.skipped&&!loud)return;
+  updateInfo=r;
+  $("updateTag").textContent="v"+r.latest;
+  $("updateText").textContent="Version "+r.latest+" is out."+(r.prerelease?" (pre-release)":"");
+  $("updateSub").textContent="You are on "+r.current+".";
+  $("updateBar").classList.add("show");
+}
+$("ver").onclick=()=>checkUpdate(true);
 $("updateGet").onclick=async ()=>{
   if(!updateInfo)return;
   const r=await window.pywebview.api.open_url(updateInfo.url);
