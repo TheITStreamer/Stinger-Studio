@@ -27,6 +27,10 @@ Animation styles:
   wave       a wall slides in with a sine ripple that flattens as it settles
   shatter    converges like burst, then drops away like broken glass
 
+Effect styles need no images at all, see effects.py:
+  static, glitch, smoke, water, circle, ink, lightning, pixelate, vhs, crt,
+  glass, splatter, warp, blinds, diamond, portal
+
 Usage:
   python3 engine.py --images a.png b.png c.png --style rain --out stinger.webm
 """
@@ -45,9 +49,15 @@ from multiprocessing import Pool, cpu_count
 
 from PIL import Image, ImageChops, ImageFilter, ImageSequence
 
+import effects
+
 STYLES = ["rain", "burst", "swipe", "spiral", "swarm",
           "rows", "columns", "downpour", "zoom", "wipe", "shockwave", "vortex",
           "popcorn", "wave", "shatter"]
+
+# Styles drawn from maths alone, no images needed. They live in effects.py.
+EFFECTS = list(effects.EFFECTS)
+ALL_STYLES = STYLES + EFFECTS
 
 DIRECTIONS = ["left", "right", "up", "down"]
 
@@ -58,6 +68,8 @@ DIRECTIONS = ["left", "right", "up", "down"]
 # different. The CLI still accepts it for them, it just isn't worth a control.
 DIRECTIONAL = {"rain": "down", "swipe": "right", "wipe": "right",
                "downpour": "down", "wave": "right"}
+# effects that can be aimed, with their usual direction
+DIRECTIONAL.update(effects.NATURAL_DIR)
 
 # Styles that can leave in a different direction than they arrived. They all
 # travel between a far point and their grid home, so the far point can simply
@@ -751,6 +763,18 @@ def render_frame(t, sprites, cfg, logo=None):
     cx, cy = w / 2.0, h / 2.0
     diag = math.hypot(w, h)
 
+    # ---- effects: no images, the whole frame comes from effects.py ----
+    if style in EFFECTS:
+        k = clamp01(ease(cov))
+        canvas = effects.render_effect(
+            style, w, h, t, t_ms / 1000.0, k, t <= in_frac, cfg["seed"],
+            hue=cfg.get("fx_hue", 0.0), sat=cfg.get("fx_sat", 1.0),
+            tint=cfg.get("fx_tint", (255, 255, 255)), in_frac=in_frac,
+            colours=cfg.get("fx_colours"), gradient=cfg.get("fx_gradient", True),
+            direction=direction, drops=cfg.get("fx_drops", 12))
+        render_logo(canvas, logo, t, cfg)
+        return canvas
+
     # ---- continuous downpour: no pause, screen packed mid-fall ----
     if style == "downpour":
         up = direction == "up"
@@ -960,18 +984,23 @@ def _init_worker(cfg):
     # Effects were already baked by the parent and written out as PNGs, so a
     # worker just reads finished frames — no outline or shadow work repeated.
     baked = cfg.get("baked")
-    if baked:
+    if cfg["style"] in EFFECTS:
+        emotes = []
+    elif baked:
         emotes = load_baked_emotes(baked)
     else:
         emotes = load_emotes(
             cfg["images"], cfg["emote_px"],
             outline=cfg["outline"], outline_color=cfg["outline_color"],
             shadow=cfg["shadow"])
-    rng = Rng(cfg["seed"])
-    sprites, _ = make_sprite_layout(
-        emotes, cfg["width"], cfg["height"], cfg["emote_px"],
-        cfg["layout_density"], rng,
-        weights=cfg.get("weights"), size_variety=cfg.get("size_variety", 0.0))
+    sprites = []
+    if emotes:
+        rng = Rng(cfg["seed"])
+        sprites, _ = make_sprite_layout(
+            emotes, cfg["width"], cfg["height"], cfg["emote_px"],
+            cfg["layout_density"], rng,
+            weights=cfg.get("weights"),
+            size_variety=cfg.get("size_variety", 0.0))
     _W["cfg"] = cfg
     _W["sprites"] = sprites
     _W["logo"] = (load_logo(cfg["logo_path"], cfg["width"], cfg["height"],
@@ -1033,6 +1062,10 @@ def ffmpeg_cmd(fmt, w, h, fps, out, quality, audio,
                 "-metadata:s:v:0", "alpha_mode=1",
                 "-b:v", "0", "-crf", str(int(quality)),
                 "-auto-alt-ref", "0",
+                # with look-ahead on, ffmpeg can lose the last frames of the
+                # alpha layer when they are busy (static did this), and the
+                # file comes out short. No look-ahead, no lost frames.
+                "-lag-in-frames", "0",
                 "-row-mt", "1", "-cpu-used", "4",
                 "-tile-columns", "2", "-threads", "0"]
     if audio:
@@ -1061,6 +1094,8 @@ def build(images, out, style="rain", width=1920, height=1080, fps=30,
           logo=None, logo_size=22.0, logo_anchor="mc", logo_dx=0.0,
           logo_dy=0.0, logo_in="pop", logo_out=None,
           size_variety=0.0, weights=None, volume=1.0, fade_out=False,
+          hue=0.0, saturation=1.0, tint="#ffffff",
+          colours=None, gradient=True, drops=12,
           progress=None):
     """Render a stinger. Returns a dict with the transition point and metadata.
 
@@ -1073,8 +1108,11 @@ def build(images, out, style="rain", width=1920, height=1080, fps=30,
             except Exception:
                 pass
 
-    if style not in STYLES:
+    if style not in ALL_STYLES:
         raise ValueError(f"unknown style: {style}")
+    is_fx = style in EFFECTS
+    if not is_fx and not images:
+        raise ValueError("this style needs at least one image")
     if fmt not in FORMATS:
         raise ValueError(f"unknown format: {fmt}")
 
@@ -1110,19 +1148,28 @@ def build(images, out, style="rain", width=1920, height=1080, fps=30,
         "logo_out": logo_out if logo_out in LOGO_ANIMS else None,
         "size_variety": max(0.0, min(0.6, float(size_variety or 0.0))),
         "weights": list(weights) if weights else None,
+        "fx_hue": max(-180.0, min(180.0, float(hue or 0.0))),
+        "fx_sat": max(0.0, min(2.0, float(1.0 if saturation is None
+                                          else saturation))),
+        "fx_tint": parse_color(tint, (255, 255, 255)),
+        "fx_colours": [str(c) for c in colours] if colours else None,
+        "fx_gradient": bool(gradient),
+        "fx_drops": int(drops) if int(drops or 0) in effects.DROP_GRIDS else 12,
     }
 
     # Bake outline/shadow exactly once, here, and hand the workers finished
     # PNGs. Doing it in every worker as well was up to 9x the same work.
-    emotes = load_emotes(images, emote_px, outline=cfg["outline"],
-                         outline_color=outline_color, shadow=cfg["shadow"])
+    emotes = ([] if is_fx else
+              load_emotes(images, emote_px, outline=cfg["outline"],
+                          outline_color=outline_color, shadow=cfg["shadow"]))
     bake_dir = tempfile.mkdtemp(prefix="stinger_bake_")
     try:
-        cfg["baked"] = bake_emotes_to_disk(emotes, bake_dir)
-
-        sprites, count = make_sprite_layout(
-            emotes, width, height, emote_px, layout_density, Rng(seed),
-            weights=cfg["weights"], size_variety=cfg["size_variety"])
+        sprites, count = [], 0
+        if not is_fx:
+            cfg["baked"] = bake_emotes_to_disk(emotes, bake_dir)
+            sprites, count = make_sprite_layout(
+                emotes, width, height, emote_px, layout_density, Rng(seed),
+                weights=cfg["weights"], size_variety=cfg["size_variety"])
         logo_obj = load_logo(logo, width, height, logo_size) if logo else None
 
         transition_ms = int(round(n_frames * in_frac / fps * 1000))
@@ -1223,9 +1270,25 @@ def _build_png_sequence(out, cfg, sprites, nproc, use_pool, report, logo=None):
 # --------------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser(description="Make OBS WebM stinger transitions from a set of images.")
-    ap.add_argument("--images", nargs="+", required=True, help="image files (PNG/GIF/WebP; transparency ideal)")
+    ap.add_argument("--images", nargs="+", default=[],
+                    help="image files (PNG/GIF/WebP; transparency ideal). "
+                         "Not needed for the effect styles.")
     ap.add_argument("--out", default="stinger.webm")
-    ap.add_argument("--style", choices=STYLES, default="rain")
+    ap.add_argument("--style", choices=ALL_STYLES, default="rain")
+    ap.add_argument("--hue", type=float, default=0.0,
+                    help="effects only: turn the colours by this many degrees (-180 to 180)")
+    ap.add_argument("--saturation", type=float, default=100.0,
+                    help="effects only: colour strength in %% (0-200, 100 = unchanged)")
+    ap.add_argument("--tint", default="#ffffff",
+                    help="effects only: tint colour for static and smoke")
+    ap.add_argument("--colours", nargs="+", default=None,
+                    help="effects only: colours for circle, diamond and blinds, "
+                         "for example --colours #ff0000 #0000ff")
+    ap.add_argument("--no-gradient", action="store_true", dest="no_gradient",
+                    help="blinds only: one colour instead of a gradient")
+    ap.add_argument("--drops", type=int, default=12,
+                    choices=sorted(effects.DROP_GRIDS),
+                    help="ink and splatter only: how many drops")
     ap.add_argument("--width", type=int, default=1920)
     ap.add_argument("--height", type=int, default=1080)
     ap.add_argument("--fps", type=int, default=30)
@@ -1236,7 +1299,8 @@ def main():
     ap.add_argument("--density", type=float, default=2.0, help="coverage multiplier; higher = more images / fuller cover")
     ap.add_argument("--emote-px", type=int, default=160, help="image size in px (longest side)")
     ap.add_argument("--direction", choices=DIRECTIONS, default=None,
-                    help="travel direction for rain/swipe/wipe/wave/downpour")
+                    help="travel direction for rain/swipe/wipe/wave/downpour, "
+                         "and for the water, smoke, blinds, diamond and vhs effects")
     ap.add_argument("--direction-out", choices=DIRECTIONS, default=None,
                     dest="direction_out",
                     help="where rain/swipe/wipe/wave fly off to on the way out "
@@ -1270,6 +1334,9 @@ def main():
     ap.add_argument("--bg-test", action="store_true", help="composite on green bg to preview (NOT for OBS)")
     args = ap.parse_args()
 
+    if args.style not in EFFECTS and not args.images:
+        print(f"--images is needed for the {args.style} style", file=sys.stderr)
+        sys.exit(1)
     for p in args.images:
         if not os.path.isfile(p):
             print(f"missing image: {p}", file=sys.stderr)
@@ -1307,6 +1374,8 @@ def main():
         logo_in=args.logo_in, logo_out=args.logo_out,
         size_variety=args.size_variety / 100.0, weights=args.weights,
         volume=args.volume / 100.0, fade_out=args.fade_out,
+        hue=args.hue, saturation=args.saturation / 100.0, tint=args.tint,
+        colours=args.colours, gradient=not args.no_gradient, drops=args.drops,
     )
     print(f"wrote {r['out']}  ({r['frames']} frames, {r['count']} sprites, "
           f"style={args.style}, seed={r['seed']})")

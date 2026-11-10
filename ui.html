@@ -54,6 +54,11 @@
   .styles button{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:9px;border-radius:8px;cursor:pointer;font-size:12px;transition:.12s;text-transform:capitalize}
   .styles button:hover{border-color:var(--acc2)}
   .styles button.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+  .fxselect{width:100%;padding:9px;font-size:12px;cursor:pointer}
+  .fxselect.on{border-color:var(--acc);color:#fff;background:var(--acc);font-weight:600}
+  .fxselect option,.fxselect optgroup{background:var(--panel);color:var(--txt);font-weight:400}
+  .sublabel{font-size:11px;color:var(--dim);margin:14px 0 7px}
+  .group.hide{display:none}
 
   .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
   .row label{font-size:12px;color:var(--dim)}
@@ -179,6 +184,8 @@
     <div class="group">
       <label>Style</label>
       <div class="styles" id="styles"></div>
+      <div class="sublabel">Effects (no images needed)</div>
+      <select id="fxSelect" class="fxselect"></select>
       <div class="row hide" id="dirRow" style="margin-top:10px">
         <label>Direction in</label>
         <select id="dir"></select>
@@ -189,11 +196,31 @@
       </div>
     </div>
 
+    <div class="group hide" id="fxGroup">
+      <label>Effect settings</label>
+      <div id="fxColourRows"></div>
+      <div class="row hide" id="fxGradRow"><label>Gradient</label><input type="checkbox" id="fxGrad" checked></div>
+      <div class="row hide" id="fxDropsRow"><label>Drops</label>
+        <select id="fxDrops">
+          <option value="1">1 (one big drop)</option><option value="2">2</option>
+          <option value="3">3</option><option value="4">4</option><option value="6">6</option>
+          <option value="8">8</option><option value="9">9</option><option value="12" selected>12</option>
+        </select>
+      </div>
+      <div class="row" id="fxHueRow"><label>Hue</label><input type="range" id="fxHue" min="-180" max="180" step="1" value="0"><span class="val" id="fxHueV">0°</span></div>
+      <div class="row" id="fxSatRow"><label>Saturation</label><input type="range" id="fxSat" min="0" max="200" step="1" value="100"><span class="val" id="fxSatV">100%</span></div>
+      <div class="row hide" id="fxTintRow"><label>Tint</label><input type="color" id="fxTint" value="#ffffff"></div>
+      <div class="filerow">
+        <button class="mini" id="fxRandom" style="flex:1">Random colours</button>
+        <button class="mini" id="fxReset" style="flex:1">Reset colours</button>
+      </div>
+    </div>
+
     <div class="group">
       <label>Adjust</label>
-      <div class="row"><label>Image size</label><input type="range" id="size" min="80" max="500" step="10" value="160"><span class="val" id="sizeV">160px</span></div>
-      <div class="row"><label>Amount</label><input type="range" id="dens" min="1" max="3.5" step="0.1" value="2.0"><span class="val" id="densV">2.0×</span></div>
-      <div class="row"><label>Size variety</label><input type="range" id="vary" min="0" max="60" step="1" value="0"><span class="val" id="varyV">off</span></div>
+      <div class="row" id="sizeRow"><label>Image size</label><input type="range" id="size" min="80" max="500" step="10" value="160"><span class="val" id="sizeV">160px</span></div>
+      <div class="row" id="densRow"><label>Amount</label><input type="range" id="dens" min="1" max="3.5" step="0.1" value="2.0"><span class="val" id="densV">2.0×</span></div>
+      <div class="row" id="varyRow"><label>Size variety</label><input type="range" id="vary" min="0" max="60" step="1" value="0"><span class="val" id="varyV">off</span></div>
       <div class="row"><label>Duration</label><input type="range" id="dur" min="0.6" max="5" step="0.1" value="1.2"><span class="val" id="durV">1.2s</span></div>
       <div class="row"><label>Hold</label><input type="range" id="hold" min="0" max="0.5" step="0.02" value="0.08"><span class="val" id="holdV">0.08</span></div>
       <div class="row"><label>Transition point</label><input type="range" id="infrac" min="0.2" max="0.8" step="0.01" value="0.5"><span class="val" id="infracV">50%</span></div>
@@ -226,7 +253,7 @@
       </div>
     </div>
 
-    <div class="group">
+    <div class="group" id="imgFxGroup">
       <label>Image effects</label>
       <div class="row"><label>Outline</label><input type="range" id="outline" min="0" max="4" step="1" value="0"><span class="val" id="outlineV">off</span></div>
       <div class="row"><label>Outline colour</label><input type="color" id="outlineColor" value="#000000"></div>
@@ -332,6 +359,65 @@ const FPS_STEPS=[24,30,48,60,90,120];
 const EXT={webm:".webm",mov:".mov",png:".zip"};
 const FMT_LABEL={webm:"WebM",mov:"MOV",png:"PNG sequence"};
 const STAGGER=0.4;
+// styles that need no images (mirrors effects.EFFECTS); the maths is further down
+const EFFECTS=["static","glitch","smoke","water","circle","ink",
+               "lightning","pixelate","vhs","crt","glass","splatter","warp",
+               "blinds","diamond","portal",
+               "clouds","rainglass","snow","bubbles","sand","matrix","hologram","signal","datamosh","filmburn","grain","channel","bitwipe","iris","page","curtain","tiles","radial","zoomblur","liquid","bars","blobs","aurora","speed","energy","loading","health","lag"];
+// how the effects dropdown is grouped
+const FX_GROUPS=[
+  ["Natural",["smoke","water","ink","lightning","clouds","rainglass","snow","bubbles","sand","aurora"]],
+  ["Digital",["static","glitch","pixelate","matrix","hologram","signal","datamosh"]],
+  ["Retro",["vhs","crt","filmburn","grain","channel","bitwipe"]],
+  ["Shapes",["circle","iris","diamond","blinds","tiles","radial","page","curtain","glass","portal","zoomblur"]],
+  ["Colour",["splatter","liquid","bars","blobs"]],
+  ["Gamer",["warp","speed","energy","loading","health","lag"]]];
+const TINT_EFFECTS=["static","smoke","snow"];
+const STYLE_LABEL={circle:"circle wipe",ink:"ink drop",
+  vhs:"VHS tracking",crt:"CRT turn off",glass:"glass shatter",
+  splatter:"paint splatter",warp:"warp speed",diamond:"diamond wipe",
+  portal:"portal swirl",rainglass:"rain on glass",matrix:"matrix code",
+  signal:"signal loss",filmburn:"film burn",grain:"film grain",channel:"channel flip",
+  bitwipe:"8 bit wipe",iris:"iris close",page:"page turn",tiles:"tiles flip",
+  radial:"radial sweep",zoomblur:"zoom blur",liquid:"liquid paint",bars:"colour bars",
+  blobs:"blob morph",speed:"speed lines",energy:"energy burst",loading:"loading bar",
+  health:"health bar",lag:"lag spike"};
+// grid rows the preview works on. Static and VHS match the render's fixed grid.
+const FX_PREVIEW_ROWS={static:270,glitch:360,smoke:180,water:270,circle:360,
+  ink:270,lightning:270,pixelate:360,vhs:240,crt:360,glass:270,
+  splatter:180,warp:270,blinds:360,diamond:360,portal:270,
+  clouds:180,rainglass:270,snow:270,bubbles:270,sand:270,matrix:360,hologram:270,signal:360,datamosh:360,filmburn:180,grain:360,channel:270,bitwipe:360,iris:270,page:270,curtain:270,tiles:270,radial:270,zoomblur:270,liquid:270,bars:360,blobs:270,aurora:180,speed:270,energy:270,loading:270,health:270,lag:360};
+const FX_SMOOTH={static:false,glitch:false,smoke:true,water:true,circle:true,
+  ink:true,lightning:true,pixelate:false,vhs:true,crt:true,glass:true,
+  splatter:true,warp:true,blinds:true,diamond:true,portal:true,
+  clouds:true,rainglass:true,snow:true,bubbles:true,sand:true,matrix:false,hologram:true,signal:false,datamosh:false,filmburn:true,grain:false,channel:true,bitwipe:false,iris:true,page:true,curtain:true,tiles:true,radial:true,zoomblur:true,liquid:true,bars:false,blobs:true,aurora:true,speed:true,energy:true,loading:true,health:true,lag:false};
+const FX_SALT={static:11,glitch:23,smoke:37,water:41,circle:67,ink:79,
+  lightning:83,pixelate:89,vhs:97,crt:101,glass:103,splatter:107,warp:109,
+  blinds:113,diamond:127,portal:131,
+  clouds:137,rainglass:139,snow:149,bubbles:151,sand:157,matrix:163,hologram:167,signal:173,datamosh:179,filmburn:181,grain:191,channel:193,bitwipe:197,iris:199,page:211,curtain:223,tiles:227,radial:229,zoomblur:233,liquid:239,bars:241,blobs:251,aurora:257,speed:263,energy:269,loading:271,health:277,lag:281};
+function isEffect(s){return EFFECTS.includes(s)}
+// effects with their own colour pickers: defaults, and what each one is called
+const FX_DEFAULT_COLOURS={circle:["#5cc8ff","#ff5c8a"],diamond:["#ff5c8a","#d94073"],
+  blinds:["#ff5c8a","#7340d9"],iris:["#0d0f14","#ff5c8a"],page:["#f4efe6"],
+  curtain:["#a3122a","#e8b84a"],tiles:["#5cc8ff","#7340d9"],radial:["#ff5c8a","#5cc8ff"],
+  loading:["#5cc8ff","#2e8bd9"],health:["#e5383b","#ffd166"]};
+const FX_COLOUR_NAMES={circle:["First circle","Second circle"],
+  diamond:["Colour 1","Colour 2"],blinds:["Top","Bottom"],iris:["Colour","Ring"],
+  page:["Page"],curtain:["Curtain","Trim"],tiles:["Colour 1","Colour 2"],
+  radial:["Start","Middle"],loading:["Bar","Stripes"],health:["Health","Damage"]};
+// effects that can be aimed; the first entry is the way it moves by default
+const EFFECT_DIRS={water:["up","down","left","right"],smoke:["up","down","left","right"],
+  blinds:["down","up","right","left"],diamond:["right","left","down","up"],vhs:["left","right"],
+  clouds:["right","left"],hologram:["down","up"],matrix:["down","up"],page:["left","right"],
+  liquid:["down","up"],loading:["right","left"],health:["right","left"]};
+const NATURAL_DIR={};for(const e in EFFECT_DIRS)NATURAL_DIR[e]=EFFECT_DIRS[e][0];
+const REMAP_EFFECTS=["water","smoke","vhs","clouds","hologram","matrix","page","liquid",
+  "loading","health"];
+const DROP_GRIDS={1:[1,1],2:[2,1],3:[3,1],4:[2,2],6:[3,2],8:[4,2],9:[3,3],12:[4,3]};
+const DROP_EFFECTS=["ink","splatter"];
+// effects that can be aimed join the direction list the image styles use
+Object.assign(DIRECTIONAL,NATURAL_DIR);Object.assign(DIR_OPTS,EFFECT_DIRS);
+function isEffect(s){return EFFECTS.includes(s)}
 
 const LOGO_ANIMS=["pop","slam","spin","fade","drop","rise","flip","swing","glitch","zoom","none"];
 const LOGO_ANCHORS=["tl","tc","tr","ml","mc","mr","bl","bc","br"];
@@ -580,14 +666,75 @@ function emoteFrame(e,tMs,phase){
 }
 
 // ---- style buttons ----
-const sc=$("styles");
-STYLES.forEach(s=>{
-  const b=document.createElement("button");b.textContent=s;b.dataset.s=s;
+const sc=$("styles"), fxSel=$("fxSelect");
+function markStyle(){
+  document.querySelectorAll(".styles button").forEach(c=>c.classList.toggle("on",c.dataset.s===style));
+  fxSel.value=isEffect(style)?style:"";
+  fxSel.classList.toggle("on",isEffect(style));
+}
+// effects have no images, so the image only controls get out of the way and
+// the colour controls come in
+function syncStyleUi(){
+  const fx=isEffect(style);
+  $("fxGroup").classList.toggle("hide",!fx);
+  $("fxTintRow").classList.toggle("hide",!TINT_EFFECTS.includes(style));
+  const pick=hasPickers(style);
+  $("fxHueRow").classList.toggle("hide",pick);
+  $("fxSatRow").classList.toggle("hide",pick);
+  $("fxGradRow").classList.toggle("hide",style!=="blinds");
+  $("fxDropsRow").classList.toggle("hide",!DROP_EFFECTS.includes(style));
+  renderColourRows();
+  ["sizeRow","densRow","varyRow"].forEach(id=>$(id).classList.toggle("hide",fx));
+  $("imgFxGroup").classList.toggle("hide",fx);
+}
+function addStyleButton(s,parent){
+  const b=document.createElement("button");b.textContent=STYLE_LABEL[s]||s;b.dataset.s=s;
   if(s===style)b.classList.add("on");
-  b.onclick=()=>{style=s;[...sc.children].forEach(c=>c.classList.toggle("on",c.dataset.s===s));
-    syncDirection();buildSprites()};
-  sc.appendChild(b);
-});
+  b.onclick=()=>{style=s;markStyle();syncDirection();syncStyleUi();buildSprites()};
+  parent.appendChild(b);
+}
+STYLES.forEach(s=>addStyleButton(s,sc));
+// effects sit in a dropdown, grouped, since the list keeps growing
+(function(){
+  const none=document.createElement("option");
+  none.value=""; none.textContent="Pick an effect…";
+  fxSel.appendChild(none);
+  for(const [name,list] of FX_GROUPS){
+    const g=document.createElement("optgroup"); g.label=name;
+    for(const e of list){
+      const o=document.createElement("option");
+      o.value=e; const lb=STYLE_LABEL[e]||e; o.textContent=lb[0].toUpperCase()+lb.slice(1);
+      g.appendChild(o);
+    }
+    fxSel.appendChild(g);
+  }
+  fxSel.onchange=()=>{
+    if(!fxSel.value){markStyle();return}
+    style=fxSel.value;markStyle();syncDirection();syncStyleUi();buildSprites();
+  };
+  markStyle();
+})();
+$("fxHue").oninput=()=>{$("fxHueV").textContent=$("fxHue").value+"°";draw()};
+$("fxSat").oninput=()=>{$("fxSatV").textContent=$("fxSat").value+"%";draw()};
+$("fxTint").oninput=()=>draw();
+$("fxReset").onclick=()=>{
+  $("fxHue").value=0;$("fxSat").value=100;$("fxTint").value="#ffffff";
+  $("fxHueV").textContent="0°";$("fxSatV").textContent="100%";
+  if(hasPickers(style)){fxColours[style]=FX_DEFAULT_COLOURS[style].slice();renderColourRows()}
+  draw();
+};
+$("fxRandom").onclick=()=>{
+  if(hasPickers(style)){
+    fxColours[style]=fxColours[style].map(()=>randomColour());renderColourRows();
+  }else{
+    $("fxHue").value=Math.round(Math.random()*360-180);
+    $("fxHueV").textContent=$("fxHue").value+"°";
+    if(TINT_EFFECTS.includes(style))$("fxTint").value=randomColour();
+  }
+  draw();
+};
+$("fxGrad").onchange=()=>{renderColourRows();draw()};
+$("fxDrops").onchange=()=>draw();
 function syncDirection(){
   const opts=DIR_OPTS[style];
   const row=$("dirRow"), sel=$("dir");
@@ -772,11 +919,11 @@ function Rng(seed){
 let sprites=[], viewScale=1, renderW=1920, renderH=1080;
 function buildSprites(){
   sprites=[];
-  if(!emotes.length){draw();return}
-  refreshEffects();
   const parts=$("res").value.split("x").map(Number);
   renderW=parts[0]; renderH=parts[1];
   viewScale=CW/renderW;
+  if(!emotes.length||isEffect(style)){draw();return}
+  refreshEffects();
   const epx=+$("size").value;
   const dens=+$("dens").value;
   const variety=Math.max(0,Math.min(0.6,(+$("vary").value)/100));
@@ -828,6 +975,850 @@ function easeBounce(t){
 }
 function popScale(p){const c1=2,c3=c1+1,u=p-1;return 1+c3*u*u*u+c1*u*u}
 const EASE={smooth:easeIO,linear:easeLinear,overshoot:easeOvershoot,bounce:easeBounce};
+
+// ---- effects: styles that need no images. Line for line copy of effects.py,
+//      same integer hash, so a seed looks the same here and in the render ----
+function hash2(x,y,s){
+  let h=(Math.imul(x|0,374761393)+Math.imul(y|0,668265263)+Math.imul(s|0,-2048144777))|0;
+  h=Math.imul(h^(h>>>13),1274126177);
+  h^=h>>>16;
+  return (h>>>0)/4294967296;
+}
+function vnoise(x,y,s){
+  const xi=Math.floor(x), yi=Math.floor(y), xf=x-xi, yf=y-yi;
+  const u=xf*xf*(3-2*xf), v=yf*yf*(3-2*yf);
+  const a=hash2(xi,yi,s), b=hash2(xi+1,yi,s), c=hash2(xi,yi+1,s), d=hash2(xi+1,yi+1,s);
+  const top=a+(b-a)*u, bot=c+(d-c)*u;
+  return top+(bot-top)*v;
+}
+function fbm(x,y,s){
+  let tot=0,amp=0.5,norm=0,f=1;
+  for(let i=0;i<4;i++){tot+=vnoise(x*f,y*f,s+i*17)*amp;norm+=amp;amp*=0.5;f*=2}
+  return tot/norm;
+}
+function c01(v){return v<0?0:v>1?1:v}
+
+function fxStatic(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k,rows=st.gh;
+  const ci=Math.floor(u*rows), cj=Math.floor(v*rows);
+  const frame=Math.floor(sec*24);
+  const n=hash2(ci,cj,s+frame*3);
+  let lum=0.12+0.88*n;
+  if(cj%2===1)lum*=0.78;
+  const roll=v-(sec*0.7-Math.floor(sec*0.7));
+  lum=Math.min(1,lum+Math.exp(-((roll*8)**2))*0.25);
+  const m=0.65*vnoise(u*5,v*5+sec*3,s+101)+0.35*hash2(cj,0,s+202+frame*7);
+  const e=0.12;
+  o[0]=o[1]=o[2]=lum; o[3]=c01((k*(1+e)-m)/e);
+}
+const GLITCH_PAL=[[0.04,0.04,0.08],[0.09,0.05,0.16],[0.15,0.10,0.30],
+                  [1.00,0.36,0.54],[0.36,0.78,1.00],[0.95,0.95,0.98]];
+const GLITCH_CUT=[0.30,0.52,0.68,0.82,0.94];
+function glitchPick(h){let i=0;for(const c of GLITCH_CUT)if(h>=c)i++;return i}
+function fxGlitch(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k;
+  const step=Math.floor(sec*14);
+  const b=Math.floor(v*14), b2=Math.floor(v*70);
+  const jump=hash2(b,step,s+1)>0.55;
+  const shift=(jump?(hash2(b,step,s+2)-0.5)*0.35:0)+(hash2(b2,step,s+3)-0.5)*0.02;
+  const split=0.004+0.012*hash2(b2,step,s+4);
+  const widths=6+10*hash2(b,0,s+5);
+  const grain=0.85+0.15*hash2(Math.floor(u*200),b2,s+10+step);
+  for(let ch=0;ch<3;ch++){
+    const off=ch===0?1:ch===1?0:-1;
+    const bx=Math.floor((u+shift+off*split)*widths);
+    o[ch]=GLITCH_PAL[glitchPick(hash2(bx,b,s+6+step))][ch]*grain;
+  }
+  const bx0=Math.floor((u+shift)*8);
+  const m=0.5*hash2(b,1,s+7)+0.3*hash2(b2,step,s+8)+0.2*hash2(bx0,b2,s+9+step);
+  o[3]=m<k?1:0;
+}
+function fxSmoke(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k;
+  const px=u*2.2, py=v*2.2+sec*0.35;
+  const q1=fbm(px+1.7,py+9.2+sec*0.15,s+10);
+  const q2=fbm(px+8.3,py+2.8,s+11);
+  const n=fbm(px+1.8*q1,py+1.8*q2,s+12);
+  // comes in from the bottom, clears from the bottom on the way out
+  const side=st.entering?1-v:v;
+  const m=0.55*n+0.45*side;
+  const e=0.22;
+  const a=c01((k*(1+e)-m)/e);
+  let shade=c01(0.15+0.6*n+0.25*q1);
+  shade*=0.75+0.25*a;
+  o[0]=shade*0.92;o[1]=shade*0.94;o[2]=shade;o[3]=a;
+}
+function fxWater(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k;
+  const fill=k*1.3-0.1, ph=st.seedf*6.283;
+  const ys=1-fill+0.035*Math.sin(u*7+sec*5+ph)+0.018*Math.sin(u*15.3-sec*8)
+          +0.03*(vnoise(u*3,sec*1.5,s+20)-0.5);
+  const d=v-ys;
+  const a=c01(d/0.004+0.5), f=c01(d*1.6);
+  let r=0.18+(0.02-0.18)*f, g=0.62+(0.12-0.62)*f, bl=0.92+(0.34-0.92)*f;
+  const c1=vnoise(u*9+sec*0.8,v*9-sec*0.5,s+21);
+  const c2=vnoise(u*9-sec*0.6+3.1,v*9+sec*0.4,s+22);
+  const caus=c01(1-Math.abs(c1-c2)*5)**3*0.35*(1-f*0.6);
+  r+=caus;g+=caus;bl+=caus;
+  const foam=d>0?c01(1-d/0.018)*0.8:0;
+  o[0]=r+(0.85-r)*foam;o[1]=g+(0.95-g)*foam;o[2]=bl+(1-bl)*foam;o[3]=a;
+}
+function fxCircle(u,v,st,o){
+  const k=st.k,asp=st.aspect;
+  const d=Math.sqrt((u-asp/2)**2+(v-0.5)**2);
+  const R=Math.sqrt(asp*asp+1)/2+0.02, ew=0.003;
+  let aa,ab;
+  if(st.entering){
+    const ra=R*Math.min(1,Math.max(0,k*1.25))-ew;
+    const rb=R*Math.min(1,Math.max(0,k*1.25-0.25))-ew;
+    aa=c01((ra-d)/ew+0.5); ab=c01((rb-d)/ew+0.5);
+  }else{
+    const w=1-k;
+    const ha=R*Math.min(1,Math.max(0,w*1.25-0.25))-ew;
+    const hb=R*Math.min(1,Math.max(0,w*1.25))-ew;
+    aa=c01((d-ha)/ew+0.5); ab=c01((d-hb)/ew+0.5);
+  }
+  const shadeb=0.85+0.15*(1-c01(d/R));
+  const a=ab+aa*(1-ab), safe=Math.max(a,1e-6), wa=aa*(1-ab);
+  const ca=st.cols[0], cb=st.cols[1];
+  o[0]=(cb[0]*shadeb*ab+ca[0]*wa)/safe;
+  o[1]=(cb[1]*shadeb*ab+ca[1]*wa)/safe;
+  o[2]=(cb[2]*shadeb*ab+ca[2]*wa)/safe;
+  o[3]=a;
+}
+function frac(x){return x-Math.floor(x)}
+// one point per grid cell (mirrors effects.drop_points). Returns the points
+// and the furthest any pixel can be from its nearest point.
+function dropPoints(st,off,count){
+  const s=st.salt,asp=st.aspect,g=DROP_GRIDS[count||st.drops],cols=g[0],rows=g[1];
+  const cw=asp/cols,ch=1/rows,out=[];
+  for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
+    const hx=hash2(i,j,s+off),hy=hash2(i,j,s+off+1),hd=hash2(i,j,s+off+2);
+    out.push([(i+0.25+0.5*hx)*cw,(j+0.25+0.5*hy)*ch,hd,j*cols+i]);
+  }
+  return [out,0.75*Math.sqrt(cw*cw+ch*ch)];
+}
+function fxInk(u,v,st,o){
+  const s=st.salt,k=st.k;
+  let f=9;
+  for(const p of st.pts){
+    const d=Math.sqrt((u-p[0])**2+(v-p[1])**2)*(1+0.8*p[2]);
+    if(d<f)f=d;
+  }
+  f=f+0.14*(fbm(u*5,v*5,s+42)-0.5);
+  const fmax=st.reach*1.8+0.1;
+  const T=Math.pow(k,1.6)*(fmax+0.07)-0.08;
+  const a=c01((T-f)/0.008+0.5);
+  const rim=1-0.5*c01(1-(T-f)/0.035);
+  const core=c01(f/fmax);
+  o[0]=(0.05+(0.16-0.05)*core)*rim;o[1]=(0.04+(0.12-0.04)*core)*rim;
+  o[2]=(0.16+(0.45-0.16)*core)*rim;o[3]=a;
+}
+function lightningBolts(st){
+  const s=st.salt,sec=st.sec,k=st.k,asp=st.aspect;
+  const step=Math.floor(sec*12), out=[];
+  for(let j=0;j<3;j++){
+    if(hash2(j,step,s+51)>=0.35+0.65*k)continue;
+    out.push([(0.15+0.7*hash2(j,step,s+52))*asp, j+step*3]);
+  }
+  return {bolts:out, fl:hash2(step,9,s+55)>0.7?0.25*k:0,
+          flash:Math.exp(-(((st.t-st.inFrac)/0.06)**2))};
+}
+function fxLightning(u,v,st,o){
+  const s=st.salt,k=st.k,L=st.light;
+  let glow=0,core=0;
+  for(const b of L.bolts){
+    const x=b[0]+0.15*(vnoise(v*6,b[1],s+53)-0.5)+0.05*(vnoise(v*22,b[1],s+54)-0.5);
+    const dx=Math.abs(u-x);
+    core+=Math.exp(-((dx/0.006)**2));
+    glow+=Math.exp(-((dx/0.05)**2))*0.5;
+  }
+  const fl=L.fl, flash=L.flash;
+  o[0]=0.06+fl*0.5+glow*0.35+core*0.9+flash*0.85;
+  o[1]=0.06+fl*0.55+glow*0.4+core*0.92+flash*0.88;
+  o[2]=0.16+fl*0.8+glow*0.8+core+flash;
+  o[3]=c01(k*1.5-0.5+(glow+core)*k*1.5);
+}
+const PIX_A=[1.00,0.36,0.54], PIX_C=[0.45,0.25,0.85], PIX_B=[0.36,0.78,1.00];
+function fxPixelate(u,v,st,o){
+  const s=st.salt,k=st.k,asp=st.aspect;
+  const cx=Math.floor(u*9), cy=Math.floor(v*9);
+  const hf=hash2(Math.floor(u*27),Math.floor(v*27),s+61);
+  const m=0.5*hash2(cx,cy,s+60)+0.5*hf;
+  const g=c01(((cx+0.5)/9/asp+(cy+0.5)/9)*0.5)*2;
+  const w1=c01(g), w2=c01(g-1), shade=0.8+0.2*hf;
+  for(let c=0;c<3;c++)o[c]=(PIX_A[c]+(PIX_C[c]-PIX_A[c])*w1+(PIX_B[c]-PIX_C[c])*w2)*shade;
+  o[3]=m<k?1:0;
+}
+function fxVhs(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k,asp=st.aspect;
+  const step=Math.floor(sec*30);
+  const row=Math.floor(v*240);
+  const hr=hash2(row,0,s+70);
+  const jit=(hash2(Math.floor(v*30),Math.floor(step/2),s+71)-0.5)*0.02
+           +(hash2(row,step,s+72)-0.5)*0.004;
+  const c=c01((k-0.6*hr)/0.4);
+  o[3]=u>(asp+0.02)*(1-c)+jit*c*(1-c)*4?1:0;
+  const uu=u+jit;
+  let ln=0.85+0.15*hash2(row,step,s+73);
+  if(row%2===1)ln*=0.85;
+  let r=0.05*ln,g=0.18*ln,b=0.80*ln;
+  const streak=hash2(Math.floor(uu*40+hr*40),row,s+74+step)>0.985?1:0;
+  const pos=sec*0.45-Math.floor(sec*0.45);
+  const band=Math.abs(v-pos)<0.04?0.85:0;
+  const noise=hash2(Math.floor(uu*300),row,s+75+step);
+  r=r+(0.9-r)*streak;g=g+(0.9-g)*streak;b=b+(0.9-b)*streak;
+  o[0]=r+(noise-r)*band;o[1]=g+(noise-g)*band;o[2]=b+(noise-b)*band;
+}
+function fxCrt(u,v,st,o){
+  const k=st.k,asp=st.aspect,ew=0.004;
+  const a1=Math.min(1,k/0.3), b1=Math.min(1,Math.max(0,(k-0.3)/0.7));
+  const hw=a1*(asp/2+0.02)-ew, hh=0.003+b1*0.52;
+  const du=Math.abs(u-asp/2), dv=Math.abs(v-0.5);
+  o[3]=c01((hw-du)/ew+0.5)*c01((hh-dv)/ew+0.5);
+  const edge=Math.exp(-(((hh-dv)/0.01)**2))*(0.6*(1-b1)+0.25);
+  const scan=Math.floor(v*270)%2===1?0.7:1;
+  const base=(0.02+0.06*Math.exp(-(du*du+dv*dv)*3))*scan;
+  const lum=base+(1-b1)+edge;
+  o[0]=lum*0.9;o[1]=lum*0.95;o[2]=lum+0.02;
+}
+function fxGlass(u,v,st,o){
+  const s=st.salt,k=st.k,cs=0.2;
+  const gx=Math.floor(u/cs), gy=Math.floor(v/cs);
+  let d1=9,d2=9,ix=0,iy=0;
+  for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++){
+    const cx=gx+ox, cy=gy+oy;
+    const px=(cx+0.15+0.7*hash2(cx,cy,s+80))*cs;
+    const py=(cy+0.15+0.7*hash2(cx,cy,s+81))*cs;
+    const d=Math.sqrt((u-px)**2+(v-py)**2);
+    if(d<d1){d2=d1;d1=d;ix=cx;iy=cy}else d2=Math.min(d2,d);
+  }
+  const hs=hash2(ix,iy,s+82);
+  const a=hs<k?1:0;
+  const pop=c01(1-(k-hs)/0.08)*a;
+  const crack=c01(1-(d2-d1)/0.006);
+  const shade=0.55+0.45*hash2(ix,iy,s+84);
+  const sheen=0.2*hash2(ix,iy,s+85)*c01(1-d1/0.2);
+  const lift=crack*0.9+pop*0.6+sheen;
+  o[0]=(0.25+(0.65-0.25)*v)*shade+lift;o[1]=(0.55+(0.35-0.55)*v)*shade+lift;
+  o[2]=0.95*shade+lift;o[3]=a;
+}
+const SPLAT_COLS=[[1.00,0.36,0.54],[0.36,0.78,1.00],[1.00,0.82,0.25],
+                  [0.55,0.30,0.95],[1.00,0.55,0.20],[0.30,0.90,0.60]];
+function fxSplatter(u,v,st,o){
+  const s=st.salt,k=st.k;
+  let pr=0,pg=0,pb=0,A=0;
+  const full=st.reach*1.15+0.14;
+  for(const p of st.pts){
+    const rad=full*Math.min(1,Math.max(0,(k-p[2]*0.5)/0.5));
+    if(rad<=0)continue;
+    const d=Math.sqrt((u-p[0])**2+(v-p[1])**2)*(0.85+0.3*vnoise(u*5+p[3]*3.1,v*5,s+91));
+    const ai=c01((rad-0.005-d)/0.005+0.5);
+    const col=SPLAT_COLS[p[3]%6];
+    const gloss=(0.85+0.15*c01(1-d/rad))*ai, keep=1-ai;
+    pr=col[0]*gloss+pr*keep;pg=col[1]*gloss+pg*keep;pb=col[2]*gloss+pb*keep;
+    A=ai+A*keep;
+  }
+  const safe=Math.max(A,1e-6);
+  o[0]=pr/safe;o[1]=pg/safe;o[2]=pb/safe;o[3]=A;
+}
+function fxWarp(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k,asp=st.aspect;
+  const du=u-asp/2, dv=v-0.5;
+  const r=Math.sqrt(du*du+dv*dv);
+  const tn=Math.atan2(dv,du)/(2*Math.PI)+0.5;
+  const R=Math.sqrt(asp*asp+1)/2;
+  let streak=0;
+  const layers=[[180,90],[97,95]];
+  for(let layer=0;layer<2;layer++){
+    const nsl=layers[layer][0], off=layers[layer][1];
+    const sl=Math.floor(tn*nsl);
+    const h1=hash2(sl,layer,s+off), sp=0.4+1.2*hash2(sl,layer,s+off+1);
+    const pos=frac(h1+sec*sp*0.7);
+    const ps=pos*pos*R*1.1;
+    const ln=(0.02+0.3*pos)*(0.3+0.7*k);
+    const inside=c01((r-ps)/0.01)*c01((ps+ln-r)/0.01);
+    const line=c01(1-Math.abs(frac(tn*nsl)-0.5)*3);
+    streak+=inside*line*(0.4+0.6*pos);
+  }
+  const glow=Math.exp(-((r/(0.05+0.5*k))**2))*k;
+  o[3]=c01(k*1.5-0.5+streak*k*1.5+glow);
+  o[0]=0.02+glow*0.5+streak*0.85;o[1]=0.03+glow*0.7+streak*0.9;o[2]=0.10+glow+streak;
+}
+function fxBlinds(u,v,st,o){
+  const k=st.k,asp=st.aspect,dir=st.direction,n=12;
+  const x01=dir==="up"?1-v:dir==="right"?u/asp:dir==="left"?1-u/asp:v;
+  const sl=Math.floor(x01*n), ly=x01*n-sl;
+  const ks=c01(k*1.3-0.3*(sl/(n-1)));
+  const ew=0.05, thr=ks*(1+2*ew)-ew;
+  const x=st.entering?ly:1-ly;
+  o[3]=c01((thr-x)/ew+0.5);
+  const tc=st.gradient?sl/(n-1):sl*0;
+  const shade=(0.7+0.3*(1-ly))*(ly>0.94?0.6:1);
+  const c0=st.cols[0], c1=st.cols[1];
+  o[0]=(c0[0]+(c1[0]-c0[0])*tc)*shade;o[1]=(c0[1]+(c1[1]-c0[1])*tc)*shade;
+  o[2]=(c0[2]+(c1[2]-c0[2])*tc)*shade;
+}
+function fxDiamond(u,v,st,o){
+  const k=st.k,asp=st.aspect,cs=0.125;
+  const cx=Math.floor(u/cs), cy=Math.floor(v/cs);
+  const lx=u/cs-cx-0.5, ly=v/cs-cy-0.5;
+  const dm=Math.abs(lx)+Math.abs(ly);
+  const dir=st.direction;
+  let dl=(dir==="down"||dir==="up")?c01((cy+0.5)*cs):c01((cx+0.5)*cs/asp);
+  if(dir==="left"||dir==="up")dl=1-dl;
+  if(!st.entering)dl=1-dl;
+  const kc=c01((k-dl*0.5)/0.5);
+  const ew=0.04, thr=kc*(1+2*ew)-ew;
+  o[3]=c01((thr-dm)/ew+0.5);
+  const odd=(cx+cy)%2===1, shine=0.85+0.15*(1-dm);
+  const c=odd?st.cols[1]:st.cols[0];
+  o[0]=c[0]*shine;o[1]=c[1]*shine;o[2]=c[2]*shine;
+}
+function fxPortal(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k,asp=st.aspect;
+  const du=u-asp/2, dv=v-0.5;
+  const r=Math.sqrt(du*du+dv*dv), th=Math.atan2(dv,du);
+  const R=Math.sqrt(asp*asp+1)/2;
+  const wob=0.08*Math.sin(th*3+r*10-sec*5);
+  const inside=st.entering?k*(R+0.2)-0.1+wob-r:r-((1-k)*(R+0.2)-0.1+wob);
+  o[3]=c01(inside/0.004+0.5);
+  const w=0.5+0.5*Math.sin(th*4+r*14-sec*7+2*fbm(du*3,dv*3,s+100));
+  const rim=c01(1-Math.abs(inside)/0.05);
+  const core=Math.exp(-((r/0.08)**2))*0.8;
+  o[0]=0.12+(0.85-0.12)*w+rim*0.16+core;
+  o[1]=0.02+(0.25-0.02)*w+rim*0.36+core;
+  o[2]=0.28+(0.95-0.28)*w+rim*0.40+core;
+}
+const FX_FN={static:fxStatic,glitch:fxGlitch,smoke:fxSmoke,water:fxWater,
+             circle:fxCircle,ink:fxInk,lightning:fxLightning,
+             pixelate:fxPixelate,vhs:fxVhs,crt:fxCrt,glass:fxGlass,
+             splatter:fxSplatter,warp:fxWarp,blinds:fxBlinds,diamond:fxDiamond,
+             portal:fxPortal};
+
+// ---- second batch (mirrors the second half of effects.py) ----
+// _wipe and _dissolve are the two ways an effect promises full cover
+function wipe(kc,x,ew){const thr=kc*(1+2*ew)-ew;return c01((thr-x)/ew+0.5)}
+function dissolve(k,m,e){return c01((k*(1+e)-m)/e)}
+function halfdiag(asp){return Math.sqrt(asp*asp+1)/2}
+function mix(a,b,f){return a+(b-a)*f}
+
+function fxClouds(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k,asp=st.aspect;
+  const n=fbm(u*1.8-sec*0.25,v*2.5,s+200), n2=fbm(u*4-sec*0.4,v*4,s+201);
+  const side=st.entering?u/asp:1-u/asp;
+  o[3]=dissolve(k,0.55*n+0.45*side,0.2);
+  const lift=c01(n*1.6-0.25), shade=0.78+0.22*n2;
+  o[0]=mix(0.55,1,lift)*shade;o[1]=mix(0.70,1,lift)*shade;o[2]=mix(0.95,1,lift)*shade;
+}
+function fxRainglass(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k;
+  const n=fbm(u*3,v*3,s+210);
+  const side=st.entering?v:1-v;
+  o[3]=dissolve(k,0.6*n+0.4*side,0.15);
+  const base=0.32+0.18*fbm(u*6,v*6,s+211);
+  const cx=Math.floor(u*20), cy=Math.floor(v*20);
+  const px=(cx+0.2+0.6*hash2(cx,cy,s+212))/20, py=(cy+0.2+0.6*hash2(cx,cy,s+213))/20;
+  const rad=0.006+0.012*hash2(cx,cy,s+214);
+  const d=Math.sqrt((u-px)**2+(v-py)**2);
+  const drop=hash2(cx,cy,s+215)>0.35?c01(1-d/rad):0;
+  const col=Math.floor(u*70);
+  const head=frac(hash2(col,1,s+216)+sec*(0.3+0.5*hash2(col,2,s+216)))*1.3;
+  const tail=head-v;
+  const streak=(hash2(col,0,s+216)>0.8&&tail>0)
+    ?c01(1-tail/0.25)*c01(1-Math.abs(frac(u*70)-0.5)*4):0;
+  const lum=base+drop*0.35+streak*0.3;
+  o[0]=lum*0.85;o[1]=lum*0.95;o[2]=lum*1.1;
+}
+function fxSnow(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k;
+  let flakes=0;
+  for(let L=0;L<3;L++){
+    const cs=1/(10+8*L);
+    const vv=v-sec*(0.12+0.08*L);
+    const uu=u+0.03*Math.sin(sec*1.5+v*6+L);
+    const cx=Math.floor(uu/cs), cy=Math.floor(vv/cs);
+    const px=(cx+0.2+0.6*hash2(cx,cy,s+220+L))*cs, py=(cy+0.2+0.6*hash2(cx,cy,s+223+L))*cs;
+    const rad=cs*(0.06+0.08*hash2(cx,cy,s+226+L));
+    const d=Math.sqrt((uu-px)**2+(vv-py)**2);
+    flakes=Math.max(flakes,c01(1-d/rad)*1.5);
+  }
+  flakes=c01(flakes);
+  const top=1.08-k*1.25+0.1*(vnoise(u*3,0.5,s+229)-0.5);
+  const pile=c01((v-top)/0.006+0.5);
+  const fog=c01(k*1.6-0.6);
+  o[3]=Math.max(Math.max(fog,pile),flakes*Math.min(1,k*4));
+  o[0]=0.88+0.12*flakes;o[1]=0.92+0.08*flakes;o[2]=1;
+}
+function fxBubbles(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k;
+  const n=fbm(u*2.5,v*2.5+sec*0.4,s+230);
+  const side=st.entering?1-v:v;
+  const fill=dissolve(k,0.5*n+0.5*side,0.15);
+  let ring=0,inner=0;
+  const cs=1/6, vv=v+sec*0.35, gx=Math.floor(u/cs), gy=Math.floor(vv/cs);
+  for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++){
+    const cx=gx+ox, cy=gy+oy;
+    const px=(cx+0.25+0.5*hash2(cx,cy,s+231))*cs, py=(cy+0.25+0.5*hash2(cx,cy,s+232))*cs;
+    const rad=cs*(0.15+0.45*hash2(cx,cy,s+233));
+    const d=Math.sqrt((u-px)**2+(vv-py)**2);
+    ring=Math.max(ring,c01(1-Math.abs(d-rad)/0.006));
+    inner=Math.max(inner,c01(1-d/rad)*0.3);
+  }
+  const mixb=c01(ring*0.9+inner);
+  const bub=c01(ring+inner)*Math.min(1,k*3);
+  o[3]=Math.max(fill,bub);
+  o[0]=mix(0.06,0.75,mixb);o[1]=mix(0.35,0.95,mixb);o[2]=mix(0.65,1,mixb);
+}
+function fxSand(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k,asp=st.aspect;
+  const grain=hash2(Math.floor(u*400),Math.floor(v*400),s+240);
+  const dune=fbm(u*3,v*3,s+241);
+  if(st.entering){
+    const top=1-(k*1.3-0.1)+0.05*Math.sin(u*3+st.seedf*6.283)+0.04*(vnoise(u*2,0.5,s+242)-0.5);
+    o[3]=c01((v-top)/0.004+0.5);
+  }else{
+    const m=0.55*(1-u/asp)+0.45*(0.7*fbm(u*4+sec,v*4,s+243)+0.3*grain);
+    o[3]=dissolve(k,m,0.08);
+  }
+  const shade=(0.8+0.2*dune)*(0.85+0.15*grain);
+  o[0]=0.86*shade;o[1]=0.70*shade;o[2]=0.45*shade;
+}
+function fxMatrix(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k,asp=st.aspect;
+  const col=Math.floor(u/asp*60), row=Math.floor(v*34);
+  const kc=c01(k*1.3-0.3*hash2(col,0,s+250));
+  o[3]=wipe(kc,st.entering?v:1-v,0.02);
+  const spd=0.4+0.8*hash2(col,1,s+250);
+  const head=frac(hash2(col,2,s+250)+sec*spd)*1.5-0.25;
+  const tr=head-v;
+  const bright=tr>=0?Math.exp(-Math.abs(tr)*5):0;
+  const lx=Math.floor(frac(u/asp*60)*3), ly=Math.floor(frac(v*34)*5);
+  const glyph=Math.floor(sec*6+hash2(col,row,s+251)*10);
+  const bit=hash2(col*7+lx+glyph*31,row*5+ly,s+252)>0.45;
+  const on=bit?bright:0;
+  const hd=Math.abs(tr)<1/34?on:0;
+  o[0]=0.02+on*0.2+hd*0.7;o[1]=0.03+on*0.9+hd*0.1;o[2]=0.02+on*0.35+hd*0.6;
+}
+function fxHologram(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k;
+  const x=st.entering?v:1-v, ew=0.01, thr=k*(1+2*ew)-ew;
+  const a=c01((thr-x)/ew+0.5);
+  const edge=c01(1-(thr-x)/0.04)*a;
+  const grid=(frac(u*16)<0.05||frac(v*16)<0.05)?0.3:0;
+  const scan=Math.floor(v*270)%2===1?0.65:1;
+  const flick=0.85+0.15*hash2(Math.floor(sec*15),0,s+260);
+  const wave=0.5+0.5*Math.sin(v*40-sec*8);
+  const lum=(0.5+grid+0.2*wave)*scan*flick;
+  o[0]=lum*0.3+edge;o[1]=lum*0.85+edge;o[2]=lum+edge;o[3]=a;
+}
+function fxSignal(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k;
+  const step=Math.floor(sec*10);
+  const bx=Math.floor(u*9), by=Math.floor(v*9);
+  const m=0.7*hash2(bx,by,s+270)+0.3*hash2(bx,by,s+271+step);
+  o[3]=m<k?1:0;
+  const fine=0.8+0.2*hash2(Math.floor(u*160),Math.floor(v*160),s+272+step);
+  const tear=hash2(Math.floor(v*90),step,s+273)>0.93;
+  for(let c=0;c<3;c++)o[c]=tear?0.95:(0.15+0.6*hash2(bx,by,s+274+c*13+step))*fine;
+}
+const THREE_A=[1.00,0.36,0.54], THREE_B=[0.45,0.25,0.85], THREE_C=[0.36,0.78,1.00];
+function three(g,o){
+  const w1=c01(g), w2=c01(g-1);
+  for(let c=0;c<3;c++)o[c]=THREE_A[c]+(THREE_B[c]-THREE_A[c])*w1+(THREE_C[c]-THREE_B[c])*w2;
+}
+function fxDatamosh(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k;
+  const bx=Math.floor(u*12), by=Math.floor(v*7);
+  o[3]=hash2(bx,by,s+280)<k?1:0;
+  const dx=(hash2(bx,by,s+281)-0.5)*0.6, dy=(hash2(bx,by,s+282)-0.5)*0.6+0.3;
+  const q=Math.floor(v*60)/60;
+  const f=fbm((u-dx*sec)*2,(q-dy*sec)*2,s+283);
+  three(c01(f*2.2-0.6)*2,o);
+}
+function fxFilmburn(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k,asp=st.aspect;
+  const n=fbm(u*2.5,v*2.5+sec*0.3,s+290);
+  const m=0.6*n+0.4*(u/asp), e=0.3, dd=k*(1+e)-m;
+  const a=c01(dd/e), heat=c01(dd/0.6), ch=c01(1-dd/0.06)*a, dim=1-0.5*ch;
+  o[0]=1-0.25*ch;o[1]=mix(0.35,0.95,heat)*dim;o[2]=mix(0.05,0.8,heat*heat)*dim;o[3]=a;
+}
+function fxGrain(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k,asp=st.aspect;
+  const frame=Math.floor(sec*24);
+  const du=u-asp/2, dv=v-0.5;
+  const rr=Math.sqrt(du*du+dv*dv)/halfdiag(asp);
+  const gr=hash2(Math.floor(u*270),Math.floor(v*270),s+300+frame);
+  const side=st.entering?1-rr:rr;
+  o[3]=dissolve(k,0.7*side+0.3*gr,0.1);
+  const flick=0.9+0.1*hash2(frame,0,s+301);
+  let lum=(0.8+0.2*gr)*flick*(1-0.45*rr*rr);
+  const mark=hash2(Math.floor(u*300),Math.floor(frame/3),s+302)>0.996
+           ||hash2(Math.floor(u*200),Math.floor(v*120),s+303+frame)>0.997;
+  if(mark)lum*=0.25;
+  o[0]=0.78*lum;o[1]=0.64*lum;o[2]=0.46*lum;
+}
+const CH_COLS=[[1.00,0.36,0.54],[0.36,0.78,1.00],[0.55,0.30,0.95],[1.00,0.82,0.25]];
+function fxChannel(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k,asp=st.aspect;
+  const step=Math.floor(sec*8);
+  const band=Math.floor(v*24);
+  const kb=c01(k*1.3-0.3*hash2(band,0,s+310));
+  const xl=u/asp;
+  let x=band%2===0?xl:1-xl;
+  if(!st.entering)x=1-x;
+  o[3]=wipe(kb,x,0.01);
+  const ci=Math.floor(hash2(band,step,s+311)*4);
+  const tex=0.75+0.25*hash2(Math.floor(u*200),band,s+312+step);
+  const scan=Math.floor(v*270)%2===1?0.85:1;
+  const c=CH_COLS[ci];
+  o[0]=c[0]*tex*scan;o[1]=c[1]*tex*scan;o[2]=c[2]*tex*scan;
+}
+const BIT_COLS=[[0.13,0.13,0.20],[0.35,0.20,0.60],[1.00,0.36,0.54],[1.00,0.82,0.25]];
+function fxBitwipe(u,v,st,o){
+  const s=st.salt,k=st.k,asp=st.aspect;
+  const bx=Math.floor(u*16), by=Math.floor(v*16);
+  const diag=c01((bx/(asp*16)+by/16)*0.5);
+  const h=hash2(bx,by,s+320);
+  const m=0.85*(st.entering?diag:1-diag)+0.15*h;
+  o[3]=m<k?1:0;
+  const c=BIT_COLS[Math.floor(hash2(bx,by,s+321)*4)];
+  const lx=frac(u*16), ly=frac(v*16);
+  const sh=(lx<0.15||ly<0.15)?1.25:(lx>0.85||ly>0.85)?0.7:1;
+  o[0]=c[0]*sh;o[1]=c[1]*sh;o[2]=c[2]*sh;
+}
+function fxIris(u,v,st,o){
+  const k=st.k,asp=st.aspect;
+  const d=Math.sqrt((u-asp/2)**2+(v-0.5)**2);
+  const R=halfdiag(asp)+0.02, ew=0.003;
+  const hr=(R+ew)*(1-k)-ew;
+  const a=c01((d-hr)/ew+0.5);
+  const ring=c01(1-Math.abs(d-hr)/0.012)*a*Math.min(1,Math.max(0,hr/0.02));
+  const c0=st.cols[0], c1=st.cols[1];
+  o[0]=mix(c0[0],c1[0],ring);o[1]=mix(c0[1],c1[1],ring);o[2]=mix(c0[2],c1[2],ring);o[3]=a;
+}
+function fxPage(u,v,st,o){
+  const k=st.k,asp=st.aspect;
+  const p=(asp-u)/asp*0.85+v*0.15;
+  const x=st.entering?p:1-p, ew=0.006, thr=k*(1+2*ew)-ew;
+  const a=c01((thr-x)/ew+0.5);
+  const inside=thr-x;
+  const fold=Math.min(1,(1-k)*10);
+  const curl=(inside>0&&inside<0.06)?1-fold*0.25*(1-Math.sin(inside/0.06*Math.PI)):1;
+  const shadow=(x>thr?0.35*c01(1-(x-thr)/0.05):0)*Math.min(1,k*10);
+  const A=a+shadow*(1-a), safe=Math.max(A,1e-6);
+  const lines=frac(v*24)<0.04?0.93:1;
+  const c=st.cols[0], f=curl*lines*a/safe;
+  o[0]=c[0]*f;o[1]=c[1]*f;o[2]=c[2]*f;o[3]=A;
+}
+function fxCurtain(u,v,st,o){
+  const sec=st.sec,k=st.k,asp=st.aspect;
+  const du=Math.abs(u-asp/2);
+  const x=c01(1-du/(asp/2)+0.03*Math.sin(v*3+sec*2)*k*(1-k));
+  const ew=0.006, thr=k*(1+2*ew)-ew;
+  const a=c01((thr-x)/ew+0.5);
+  const folds=(0.62+0.38*Math.sin(du*38)**2)*(0.85+0.15*(1-v));
+  const trim=c01(1-(thr-x)/0.015)*a;
+  const c0=st.cols[0], c1=st.cols[1];
+  o[0]=mix(c0[0]*folds,c1[0],trim);o[1]=mix(c0[1]*folds,c1[1],trim);
+  o[2]=mix(c0[2]*folds,c1[2],trim);o[3]=a;
+}
+function fxTiles(u,v,st,o){
+  const k=st.k,asp=st.aspect;
+  const tx=Math.floor(u*6), ty=Math.floor(v*6);
+  const lx=u*6-tx-0.5;
+  let delay=c01((tx/(asp*6)+ty/6)*0.5);
+  if(!st.entering)delay=1-delay;
+  const kc=c01((k-delay*0.5)/0.5);
+  const x=Math.abs(lx)*2;
+  o[3]=wipe(kc,x,0.04);
+  const odd=(tx+ty)%2===1;
+  const sh=(0.6+0.4*kc)*(x>0.92?0.75:1);
+  const c=odd?st.cols[1]:st.cols[0];
+  o[0]=c[0]*sh;o[1]=c[1]*sh;o[2]=c[2]*sh;
+}
+function fxRadial(u,v,st,o){
+  const k=st.k,asp=st.aspect;
+  const ang=frac(Math.atan2(u-asp/2,0.5-v)/(2*Math.PI));
+  const x=st.entering?ang:1-ang, ew=0.003;
+  const a=wipe(k,x,ew), thr=k*(1+2*ew)-ew;
+  const edge=c01(1-Math.abs(thr-x)/0.01)*a*0.3*Math.min(1,(1-k)*10);
+  const g=0.5-0.5*Math.cos(ang*2*Math.PI);
+  const c0=st.cols[0], c1=st.cols[1];
+  o[0]=mix(c0[0],c1[0],g)+edge;o[1]=mix(c0[1],c1[1],g)+edge;o[2]=mix(c0[2],c1[2],g)+edge;o[3]=a;
+}
+function fxZoomblur(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k,asp=st.aspect;
+  const du=u-asp/2, dv=v-0.5, r=Math.sqrt(du*du+dv*dv);
+  const tn=Math.atan2(dv,du)/(2*Math.PI)+0.5;
+  const sl=Math.floor(tn*140);
+  const xn=(r/(halfdiag(asp)+0.02)+0.07*hash2(sl,0,s+330))/1.07;
+  o[3]=wipe(k,st.entering?xn:1-xn,0.03);
+  const c=(0.5+0.5*Math.sin(r*30-sec*14))*(0.75+0.25*hash2(sl,1,s+330));
+  o[0]=mix(0.36,1,c);o[1]=mix(0.25,0.36,c);o[2]=mix(0.85,0.54,c);
+}
+function fxLiquid(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k;
+  const col=Math.floor(u*8), lu=u*8-col;
+  const drip=hash2(col,0,s+340)**2*Math.sqrt(Math.sin(lu*Math.PI));
+  const x=(v-0.25*drip+0.25)/1.25;
+  o[3]=wipe(k,st.entering?x:1-x,0.006);
+  const sh=0.8+0.2*fbm(u*3,v*3-sec*0.5,s+341);
+  o[0]=sh;o[1]=0.36*sh;o[2]=0.54*sh;
+}
+const SMPTE=[[0.75,0.75,0.75],[0.75,0.75,0],[0,0.75,0.75],[0,0.75,0],[0.75,0,0.75],[0.75,0,0],[0,0,0.75]];
+const SMPTE_LOW=[[0,0,0.75],[0.07,0.07,0.07],[0.75,0,0.75],[0.07,0.07,0.07],[0,0.75,0.75],[0.07,0.07,0.07],[0.75,0.75,0.75]];
+function fxBars(u,v,st,o){
+  const k=st.k,asp=st.aspect;
+  const idx=Math.min(Math.floor(u/asp*7),6);
+  const kc=c01(k*1.4-0.4*idx/6);
+  o[3]=wipe(kc,st.entering?v:1-v,0.01);
+  const c=v>0.75?SMPTE_LOW[idx]:SMPTE[idx];
+  o[0]=c[0];o[1]=c[1];o[2]=c[2];
+}
+function fxBlobs(u,v,st,o){
+  const sec=st.sec,k=st.k,kk=0.15;
+  let f=null;
+  for(const p of st.pts){
+    const ox=p[0]+0.05*Math.sin(sec*(1+p[2])+p[3]);
+    const oy=p[1]+0.05*Math.cos(sec*(1.3+p[2])+p[3]*2);
+    const d=Math.sqrt((u-ox)**2+(v-oy)**2)*(1+0.4*p[2]);
+    if(f===null)f=d;
+    else{const h=c01(0.5+0.5*(d-f)/kk);f=d+(f-d)*h-kk*h*(1-h)}
+  }
+  const fmax=(st.reach+0.05)*1.4;
+  const T=Math.pow(k,1.8)*(fmax+0.07)-0.06;
+  const a=c01((T-f)/0.006+0.5), inner=c01((T-f)/0.25), rim=c01(1-(T-f)/0.02)*0.3;
+  o[0]=1+rim;o[1]=mix(0.36,0.6,inner)+rim;o[2]=mix(0.54,0.2,inner)+rim;o[3]=a;
+}
+function fxAurora(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k;
+  const n=fbm(u*2,v*2,s+360);
+  const side=st.entering?v:1-v;
+  o[3]=dissolve(k,0.5*n+0.5*side,0.2);
+  let glow=0;
+  for(let i=0;i<3;i++){
+    const yb=0.25+0.18*i+0.1*Math.sin(u*(1.5+i*0.7)+sec*(0.6+0.2*i)+i*2)
+            +0.08*(fbm(u*1.5+i*5,sec*0.3,s+361+i)-0.5);
+    const dy=v-yb;
+    const band=Math.exp(-((dy/(dy>0?0.05:0.18))**2));
+    const rays=0.7+0.3*Math.sin(u*23+sec*1.5+6*n);
+    glow+=band*rays;
+  }
+  const stars=hash2(Math.floor(u*300),Math.floor(v*300),s+365)>0.996?0.8:0;
+  const tv=c01(v*1.4);
+  o[0]=mix(0.01,0.04,v)+glow*mix(0.55,0.15,tv)+stars;
+  o[1]=mix(0.02,0.08,v)+glow*mix(0.25,0.95,tv)+stars;
+  o[2]=mix(0.08,0.20,v)+glow*mix(0.95,0.55,tv)+stars;
+}
+function fxSpeed(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k,asp=st.aspect;
+  const du=u-asp/2, dv=v-0.5, r=Math.sqrt(du*du+dv*dv);
+  const tn=Math.atan2(dv,du)/(2*Math.PI)+0.5;
+  const R=halfdiag(asp)+0.02;
+  const fill=wipe(k,1-r/R,0.01);
+  const step=Math.floor(sec*12), sl=Math.floor(tn*160);
+  const ri=R*(1-k*(0.4+0.9*hash2(sl,step,s+370)));
+  const line=(r>ri&&hash2(sl,step,s+371)>0.35)?c01(1-Math.abs(frac(tn*160)-0.5)*4):0;
+  o[3]=Math.max(fill,line*Math.min(1,k*4));
+  o[0]=mix(0.08,1,line);o[1]=mix(0.08,1,line);o[2]=mix(0.12,1,line);
+}
+function fxEnergy(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k,asp=st.aspect;
+  const du=u-asp/2, dv=v-0.5, r=Math.sqrt(du*du+dv*dv);
+  const tn=Math.atan2(dv,du)/(2*Math.PI)+0.5;
+  const step=Math.floor(sec*20), sl=Math.floor(tn*90);
+  const xn=(r/(halfdiag(asp)+0.02)+0.08*hash2(sl,step,s+380))/1.08;
+  const x=st.entering?xn:1-xn, ew=0.02, thr=k*(1+2*ew)-ew;
+  o[3]=c01((thr-x)/ew+0.5);
+  const depth=c01((thr-x)/0.35);
+  const rings=0.85+0.15*Math.sin(r*40-sec*20);
+  o[0]=rings+0*depth;o[1]=mix(0.45,0.98,depth)*rings;o[2]=mix(0.1,0.85,depth*depth)*rings;
+}
+function fxLoading(u,v,st,o){
+  const sec=st.sec,k=st.k,asp=st.aspect;
+  const xl=u/asp, seg=Math.floor(xl*20), xc=(seg+0.5)/20, lim=k*1.05;
+  o[3]=xc<lim?1:0;
+  const stripe=frac((u+v)*8-sec*2)<0.5;
+  const lf=frac(xl*20);
+  const sh=(0.8+0.2*(1-v))*((lf<0.04||lf>0.96)?0.55:1)*(xc>=lim-0.05?1.3:1);
+  const c=stripe?st.cols[0]:st.cols[1];
+  o[0]=c[0]*sh;o[1]=c[1]*sh;o[2]=c[2]*sh;
+}
+function fxHealth(u,v,st,o){
+  const k=st.k,asp=st.aspect;
+  const xl=u/asp, ew=0.004;
+  o[3]=wipe(k,xl,ew);
+  const am=wipe(c01(k*1.15-0.15),xl,ew);
+  const sh=(frac(xl*10)<0.008?0.6:1)*(v<0.18?1.2:v>0.85?0.7:1);
+  const c0=st.cols[0], c1=st.cols[1];
+  o[0]=mix(c1[0],c0[0],am)*sh;o[1]=mix(c1[1],c0[1],am)*sh;o[2]=mix(c1[2],c0[2],am)*sh;
+}
+function fxLag(u,v,st,o){
+  const s=st.salt,sec=st.sec,k=st.k,asp=st.aspect;
+  const step=Math.floor(sec*6);
+  const kq=Math.floor(k*8)/8;
+  const bx=Math.floor(u/asp*16), by=Math.floor(v*9);
+  o[3]=hash2(bx,by,s+390)<kq?1:0;
+  const ox=(hash2(bx,by,s+391+step)-0.5)*0.1;
+  const f=frac((u+ox)*3+v*2), fr=frac((u+ox+0.01)*3+v*2);
+  const red=hash2(bx,by,s+392+step)>0.85;
+  let r=red?0.9:0.12+0.15*fr, g=red?0.2:0.12+0.15*f, b=red?0.25:0.2+0.2*f;
+  const d=Math.sqrt((u-asp/2)**2+(v-0.5)**2);
+  const seg=Math.floor(frac(Math.atan2(v-0.5,u-asp/2)/(2*Math.PI)+step/8)*8);
+  if(Math.abs(d-0.07)<0.012){const lum=0.25+0.75*seg/7;r=lum;g=lum;b=lum}
+  o[0]=r;o[1]=g;o[2]=b;
+}
+Object.assign(FX_FN,{clouds:fxClouds,rainglass:fxRainglass,snow:fxSnow,bubbles:fxBubbles,
+  sand:fxSand,matrix:fxMatrix,hologram:fxHologram,signal:fxSignal,datamosh:fxDatamosh,
+  filmburn:fxFilmburn,grain:fxGrain,channel:fxChannel,bitwipe:fxBitwipe,iris:fxIris,
+  page:fxPage,curtain:fxCurtain,tiles:fxTiles,radial:fxRadial,zoomblur:fxZoomblur,
+  liquid:fxLiquid,bars:fxBars,blobs:fxBlobs,aurora:fxAurora,speed:fxSpeed,energy:fxEnergy,
+  loading:fxLoading,health:fxHealth,lag:fxLag});
+
+// same matrices as the CSS hue-rotate() and saturate() filters
+function colourMatrix(hueDeg,sat){
+  const a=Math.cos(hueDeg*Math.PI/180), b=Math.sin(hueDeg*Math.PI/180);
+  const h=[0.213+a*0.787-b*0.213, 0.715-a*0.715-b*0.715, 0.072-a*0.072+b*0.928,
+           0.213-a*0.213+b*0.143, 0.715+a*0.285+b*0.140, 0.072-a*0.072-b*0.283,
+           0.213-a*0.213-b*0.787, 0.715-a*0.715+b*0.715, 0.072+a*0.928+b*0.072];
+  const s=sat;
+  const m=[0.213+0.787*s, 0.715-0.715*s, 0.072-0.072*s,
+           0.213-0.213*s, 0.715+0.285*s, 0.072-0.072*s,
+           0.213-0.213*s, 0.715-0.715*s, 0.072+0.928*s];
+  const out=new Array(9);
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++)
+    out[i*3+j]=m[i*3]*h[j]+m[i*3+1]*h[3+j]+m[i*3+2]*h[6+j];
+  return out;
+}
+function hexRgb(c){
+  c=String(c||"#ffffff").replace("#","");
+  if(c.length===3)c=c.split("").map(x=>x+x).join("");
+  const n=parseInt(c,16);
+  return isNaN(n)?[255,255,255]:[(n>>16)&255,(n>>8)&255,n&255];
+}
+// turn an effect drawn for one direction so it travels another way
+// (mirrors effects.remap). Writes the new coordinates into r.
+function remapUV(u,v,asp,natural,want,r){
+  let s;
+  if(want==="up")s=1-v; else if(want==="down")s=v;
+  else if(want==="right")s=u/asp; else s=1-u/asp;
+  const c=(want==="up"||want==="down")?u/asp:v;
+  if(natural==="up"||natural==="down"){r[0]=c*asp;r[1]=natural==="up"?1-s:s}
+  else{r[0]=(natural==="right"?s:1-s)*asp;r[1]=c}
+}
+function hex01(c){return hexRgb(c).map(x=>x/255)}
+// one frame as ImageData on the effect's small grid
+function fxFrame(effect,W,H,rows,t,sec,k,entering,seed,hue,sat,tint,inFrac,opts){
+  opts=opts||{};
+  const gh=rows, gw=Math.max(16,Math.round(gh*W/H));
+  const sd=((+seed)>>>0)%4294967296;
+  const st={t,sec,k:c01(k),entering,
+    salt:(sd*7+FX_SALT[effect]*1000003)%4294967296,
+    seedf:(sd%10007)/10007, aspect:W/H, gh, inFrac};
+  const dirs=EFFECT_DIRS[effect];
+  st.direction=(dirs&&dirs.includes(opts.direction))?opts.direction:NATURAL_DIR[effect];
+  st.gradient=opts.gradient!==false;
+  st.drops=DROP_GRIDS[+opts.drops]?+opts.drops:12;
+  const defs=FX_DEFAULT_COLOURS[effect]||[], given=opts.colours||[];
+  st.cols=defs.map((d,i)=>hex01(given[i]||d));
+  if(effect==="ink"){const r=dropPoints(st,43);st.pts=r[0];st.reach=r[1]}
+  else if(effect==="splatter"){const r=dropPoints(st,92);st.pts=r[0];st.reach=r[1]}
+  else if(effect==="lightning")st.light=lightningBolts(st);
+  else if(effect==="blobs"){const r=dropPoints(st,350,6);st.pts=r[0];st.reach=r[1]}
+  const remap=REMAP_EFFECTS.includes(effect)&&st.direction!==NATURAL_DIR[effect];
+  const nat=NATURAL_DIR[effect], uv=new Float64Array(2);
+  const fn=FX_FN[effect];
+  const M=(Math.abs(hue)>1e-6||Math.abs(sat-1)>1e-6)?colourMatrix(hue,sat):null;
+  const tn=TINT_EFFECTS.includes(effect)?hexRgb(tint).map(x=>x/255):null;
+  const img=new ImageData(gw,gh), d=img.data, o=new Float64Array(4);
+  let p=0;
+  for(let j=0;j<gh;j++){
+    const v=(j+0.5)/gh;
+    for(let i=0;i<gw;i++){
+      if(remap){remapUV((i+0.5)/gh,v,st.aspect,nat,st.direction,uv);fn(uv[0],uv[1],st,o)}
+      else fn((i+0.5)/gh,v,st,o);
+      let r=o[0],g=o[1],b=o[2];
+      if(tn){r*=tn[0];g*=tn[1];b*=tn[2]}
+      if(M){const r2=M[0]*r+M[1]*g+M[2]*b, g2=M[3]*r+M[4]*g+M[5]*b;
+            b=M[6]*r+M[7]*g+M[8]*b; r=r2; g=g2}
+      d[p]=Math.floor(c01(r)*255+0.5); d[p+1]=Math.floor(c01(g)*255+0.5);
+      d[p+2]=Math.floor(c01(b)*255+0.5); d[p+3]=Math.floor(c01(o[3])*255+0.5);
+      p+=4;
+    }
+  }
+  return img;
+}
+
+// The effect is worked out on a small grid, then scaled onto the preview.
+// A paused preview keeps the last frame instead of working it out again.
+const fxCanvas=document.createElement("canvas");
+let fxKeyLast="";
+// colours picked for each effect that has pickers, kept per effect so
+// switching between them doesn't lose what you chose
+const fxColours={};
+for(const e in FX_DEFAULT_COLOURS)fxColours[e]=FX_DEFAULT_COLOURS[e].slice();
+function hasPickers(e){return !!FX_DEFAULT_COLOURS[e]}
+// effects with their own pickers don't use hue and saturation, so those go
+// out as "no change"
+function fxColour(){
+  if(hasPickers(style))return {hue:0, sat:1, tint:$("fxTint").value};
+  return {hue:+$("fxHue").value, sat:(+$("fxSat").value)/100, tint:$("fxTint").value};
+}
+function fxOpts(){
+  return {colours:hasPickers(style)?fxColours[style].slice():null,
+          gradient:$("fxGrad").checked,
+          direction:EFFECT_DIRS[style]?$("dir").value:null,
+          drops:+$("fxDrops").value};
+}
+function renderColourRows(){
+  const box=$("fxColourRows");
+  box.textContent="";
+  if(!hasPickers(style))return;
+  const names=FX_COLOUR_NAMES[style];
+  // blinds with the gradient off only uses the first colour
+  const n=(style==="blinds"&&!$("fxGrad").checked)?1:names.length;
+  for(let i=0;i<n;i++){
+    const row=document.createElement("div"); row.className="row";
+    const lb=document.createElement("label");
+    lb.textContent=(style==="blinds"&&n===1)?"Colour":names[i];
+    const inp=document.createElement("input"); inp.type="color";
+    inp.value=fxColours[style][i];
+    const e=style;
+    inp.oninput=()=>{fxColours[e][i]=inp.value;draw()};
+    row.appendChild(lb); row.appendChild(inp); box.appendChild(row);
+  }
+}
+function randomColour(){
+  // bright and fairly saturated, so a random pick still looks intentional
+  const h=Math.random()*360, s=0.65+Math.random()*0.3, l=0.5+Math.random()*0.12;
+  const f=n=>{const k=(n+h/30)%12, a=s*Math.min(l,1-l);
+    return Math.round(255*(l-a*Math.max(-1,Math.min(k-3,9-k,1))))};
+  return "#"+[f(0),f(8),f(4)].map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+function drawEffect(){
+  const hold=+$("hold").value, w=windows(hold,+$("infrac").value);
+  const inFrac=w[0], dur=+$("dur").value;
+  const ease=EASE[$("easing").value]||easeIO;
+  const k=clamp01(ease(coverage(tNorm,hold,+$("infrac").value)));
+  const c=fxColour(), seed=$("seed").value||0;
+  const opts=fxOpts();
+  const key=[style,tNorm,hold,inFrac,dur,$("easing").value,seed,c.hue,c.sat,c.tint,
+             renderW,renderH,JSON.stringify(opts)].join("|");
+  if(key!==fxKeyLast){
+    const img=fxFrame(style,renderW,renderH,FX_PREVIEW_ROWS[style],tNorm,tNorm*dur,k,
+                      tNorm<=inFrac,seed,c.hue,c.sat,c.tint,inFrac,opts);
+    if(fxCanvas.width!==img.width||fxCanvas.height!==img.height){
+      fxCanvas.width=img.width; fxCanvas.height=img.height;
+    }
+    fxCanvas.getContext("2d").putImageData(img,0,0);
+    fxKeyLast=key;
+  }
+  ctx.save();
+  ctx.imageSmoothingEnabled=FX_SMOOTH[style];
+  ctx.drawImage(fxCanvas,0,0,CW,CH);
+  ctx.restore();
+}
 function windows(hold,inFrac){
   inFrac=Math.min(0.95,Math.max(0.05,inFrac));
   let half=Math.max(0,hold)/2;
@@ -913,6 +1904,11 @@ function drawLogo(t){
 
 function draw(){
   ctx.clearRect(0,0,CW,CH);
+  if(isEffect(style)){
+    $("badge").textContent=tNorm<+$("infrac").value?"Scene A":"Scene B";
+    $("badge").style.color=tNorm<+$("infrac").value?"#54e08a":"#5cc8ff";
+    drawEffect();drawLogo(tNorm);return;
+  }
   if(!emotes.length){ctx.fillStyle="#8b95a8";ctx.font="13px sans-serif";ctx.textAlign="center";
     ctx.fillText("Add images to preview the transition",CW/2,CH/2);return;}
   const hold=+$("hold").value, inFrac=+$("infrac").value;
@@ -1139,12 +2135,15 @@ function currentSettings(){
     volume:+$("vol").value, fadeOut:$("fadeOut").checked,
     logoSize:+$("logoSize").value, logoAnchor:logoAnchor,
     logoDx:+$("logoDx").value, logoDy:+$("logoDy").value,
-    logoIn:$("logoIn").value, logoOut:$("logoOut").value};
+    logoIn:$("logoIn").value, logoOut:$("logoOut").value,
+    fxHue:+$("fxHue").value, fxSat:+$("fxSat").value, fxTint:$("fxTint").value,
+    fxColours:JSON.parse(JSON.stringify(fxColours)), fxGradient:$("fxGrad").checked,
+    fxDrops:+$("fxDrops").value};
 }
 function applySettings(s){
   if(!s)return;
-  if(s.style&&STYLES.includes(s.style)){
-    style=s.style;[...sc.children].forEach(c=>c.classList.toggle("on",c.dataset.s===style));
+  if(s.style&&(STYLES.includes(s.style)||isEffect(s.style))){
+    style=s.style;markStyle();
   }
   const set=(id,v)=>{if(v!==undefined&&v!==null)$(id).value=v};
   set("dur",s.duration);set("hold",s.hold);set("dens",s.density);set("size",s.emotePx);
@@ -1165,7 +2164,19 @@ function applySettings(s){
   $("fadeOut").checked=!!s.fadeOut;
   if(previewAudio)previewAudio.volume=effVolume(tNorm);
   $("shadow").checked=!!s.shadow;
-  syncDirection();
+  // older presets have no colour settings, so they go back to the defaults
+  $("fxHue").value=s.fxHue!==undefined&&s.fxHue!==null?s.fxHue:0;
+  $("fxSat").value=s.fxSat!==undefined&&s.fxSat!==null?s.fxSat:100;
+  $("fxTint").value=s.fxTint||"#ffffff";
+  for(const e in FX_DEFAULT_COLOURS){
+    const got=s.fxColours&&s.fxColours[e];
+    fxColours[e]=FX_DEFAULT_COLOURS[e].map((d,i)=>
+      (Array.isArray(got)&&/^#[0-9a-f]{6}$/i.test(got[i]||""))?got[i]:d);
+  }
+  $("fxGrad").checked=s.fxGradient!==false;
+  $("fxDrops").value=DROP_GRIDS[+s.fxDrops]?String(+s.fxDrops):"12";
+  $("fxHueV").textContent=$("fxHue").value+"°";$("fxSatV").textContent=$("fxSat").value+"%";
+  syncDirection();syncStyleUi();
   if(s.direction&&DIR_OPTS[style]&&DIR_OPTS[style].includes(s.direction))$("dir").value=s.direction;
   $("dirOut").value=(s.directionOut&&DIR_OUT_STYLES.includes(style)
                      &&DIR_OPTS[style].includes(s.directionOut))?s.directionOut:"";
@@ -1273,6 +2284,9 @@ function basePayload(){
     quality:s.quality, outline:s.outline,
     outlineColor:s.outlineColor, shadow:s.shadow, fmt:s.fmt,
     seed:s.seed===""?null:+s.seed,
+    ...(()=>{const c=fxColour(), o=fxOpts();
+      return {hue:c.hue, saturation:c.sat*100, tint:c.tint,
+              colours:o.colours, gradient:o.gradient, drops:o.drops}})(),
   };
 }
 // one retry, in case the backend lost its copy of an asset
@@ -1303,7 +2317,7 @@ function endWork(){
 
 // ---- generate ----
 $("gen").onclick=async ()=>{
-  if(!emotes.length){flashErr("Add at least one image first.");return;}
+  if(!emotes.length&&!isEffect(style)){flashErr("Add at least one image first, or pick one of the effects.");return;}
   startWork($("gen"),"Working…");
   try{
     const r=await callWithAssets(p=>window.pywebview.api.generate(p));
@@ -1315,7 +2329,8 @@ $("gen").onclick=async ()=>{
       $("seed").value=r.seed;              // show the seed that was actually used
       $("resTitle").textContent=FMT_LABEL[lastFmt]+" ready";
       $("resMeta").innerHTML=
-        `${r.count} images · ${r.frames} frames · style ${r.direction?esc(style)+" ("+esc(r.direction)+")":esc(style)}<br>`+
+        (isEffect(style)?`${r.frames} frames · effect ${esc(STYLE_LABEL[style]||style)}<br>`
+        :`${r.count} images · ${r.frames} frames · style ${r.direction?esc(style)+" ("+esc(r.direction)+")":esc(style)}<br>`)+
         `seed <b>${r.seed}</b><br>OBS transition point: <b>${r.transition_ms} ms</b>`+
         (r.audio_dropped?`<br>Sound is not included in a PNG sequence.`:``);
       $("errText").style.display="none";
@@ -1336,7 +2351,7 @@ $("gen").onclick=async ()=>{
 };
 
 $("genAll").onclick=async ()=>{
-  if(!emotes.length){flashErr("Add at least one image first.");return;}
+  // with no images only the effects can be rendered, the app skips the rest
   startWork($("genAll"),"Rendering…");
   try{
     const r=await callWithAssets(p=>window.pywebview.api.generate_all(p));
@@ -1404,7 +2419,7 @@ $("saveBtn").onclick=async ()=>{
 };
 
 // init
-syncDirection();buildSprites();updateTpt();updateEstimate();updatePngNote();
+syncDirection();syncStyleUi();buildSprites();updateTpt();updateEstimate();updatePngNote();
 requestAnimationFrame(loop);
 </script>
 </body>

@@ -241,12 +241,13 @@ class Api:
 
     # ---------------- capability probes ----------------
     def styles(self):
-        return engine.STYLES
+        return engine.ALL_STYLES
 
     def options(self):
         """Everything the UI needs to build its selects."""
         return {
             "styles": engine.STYLES,
+            "effects": engine.EFFECTS,
             "directions": engine.DIRECTIONS,
             "directional": engine.DIRECTIONAL,
             "easings": engine.EASINGS,
@@ -350,6 +351,13 @@ class Api:
             weights=payload.get("weights") or None,
             volume=float(payload.get("volume", 100) or 0) / 100.0,
             fade_out=bool(payload.get("fadeOut", False)),
+            hue=float(payload.get("hue", 0) or 0),
+            saturation=float(100 if payload.get("saturation") is None
+                             else payload.get("saturation")) / 100.0,
+            tint=payload.get("tint") or "#ffffff",
+            colours=payload.get("colours") or None,
+            gradient=bool(payload.get("gradient", True)),
+            drops=int(payload.get("drops") or 12),
         )
 
     def generate(self, payload):
@@ -358,8 +366,10 @@ class Api:
         Returns {ok, out, transition_ms, frames, count, seed} or {ok:False, error}.
         """
         try:
-            if not payload.get("emoteHashes"):
-                return {"ok": False, "error": "Add at least one image first."}
+            if (not payload.get("emoteHashes")
+                    and payload.get("style") not in engine.EFFECTS):
+                return {"ok": False, "error": "Add at least one image first, "
+                                              "or pick one of the effects."}
             try:
                 paths, audio_path, logo_path = self._resolve(payload)
             except KeyError as miss:
@@ -397,8 +407,6 @@ class Api:
         Images are uploaded and written once, then reused for all 12 renders.
         """
         try:
-            if not payload.get("emoteHashes"):
-                return {"ok": False, "error": "Add at least one image first."}
             try:
                 paths, audio_path, logo_path = self._resolve(payload)
             except KeyError as miss:
@@ -420,7 +428,8 @@ class Api:
             shutil.rmtree(outdir, ignore_errors=True)
             os.makedirs(outdir, exist_ok=True)
 
-            styles = engine.STYLES
+            # the image styles need images; the effects always run
+            styles = (engine.STYLES if paths else []) + engine.EFFECTS
             total = len(styles)
             results = []
             self.batch_files = []

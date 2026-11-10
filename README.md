@@ -4,7 +4,6 @@ Make OBS stinger transitions out of your own images. Drop in emotes, logos, stic
 or anything else, pick a style, hit Generate. Out comes a transparent WebM that goes
 straight into OBS. Everything runs locally on your PC.
 
-<!-- SCREENSHOT: the main window with a transition mid preview -->
 
 ## A.I Disclaimer
 
@@ -12,7 +11,7 @@ I do not claim to be a programmer or having made this. Yes, I prompted Claude an
 reviewed, tested, self QA'd and tweaked. I knew what the outcomes should be and
 understand the issues enough to be able to redirect Claude to be able to fix as I do
 have an IT background. I completely understand if you do not trust this project but I
-wanted to make it clear that I orginally made this for just myself and decided to share
+wanted to make it clear that I originally made this for just myself and decided to share
 incase someone else was interested. I do not claim to be the creator, I just gave
 prompts and if it was good, I went with it.
 
@@ -20,29 +19,44 @@ prompts and if it was good, I went with it.
 
 - **Any images** - drop in PNGs, GIFs or animated WebP. Transparent backgrounds look
   best. Animated ones keep playing while they fly across the screen.
-<!-- SCREENSHOT: the Images box with a few thumbnails loaded -->
+
 
 - **Fifteen styles** - rain, burst, swipe, spiral, swarm, rows, columns, downpour,
   zoom, wipe, shockwave, vortex, popcorn, wave and shatter. Rain, swipe, wipe, wave
   and downpour can be aimed left, right, up or down. The first four also take a
   separate direction out, so they can come in from the left and leave downward.
-<!-- SCREENSHOT: the style buttons -->
+
+- **44 effects, no images needed** - pick one from the Effects list and hit
+  Generate. They are grouped in the list:
+  - Natural: smoke, water, ink drop, lightning, clouds, rain on glass, snow, bubbles,
+    sand, aurora
+  - Digital: static, glitch, pixelate, matrix code, hologram, signal loss, datamosh
+  - Retro: VHS tracking, CRT turn off, film burn, film grain, channel flip, 8 bit wipe
+  - Shapes: circle wipe, iris close, diamond wipe, blinds, tiles flip, radial sweep,
+    page turn, curtain, glass shatter, portal swirl, zoom blur
+  - Colour: paint splatter, liquid paint, colour bars, blob morph
+  - Gamer: warp speed, speed lines, energy burst, loading bar, health bar, lag spike
+
+  Most effects have hue and saturation sliders to match your channel colours. The
+  flat colour ones (circle, iris, diamond, blinds, tiles, radial, page, curtain,
+  loading bar, health bar) get a colour picker for each colour instead, and blinds
+  can be one solid colour or a gradient. Static, smoke and snow also get a tint.
+  Water, smoke, clouds, blinds, diamond, VHS, hologram, matrix, page, liquid,
+  loading bar and health bar can be aimed in a direction. Ink and paint splatter let
+  you pick how many drops, down to one big one. Random colours picks new colours,
+  and the dice shuffles the layout.
 
 - **Live preview** - runs the same maths as the real render, so what you see is what
   you get. Scrub through it or let it loop.
-<!-- SCREENSHOT: the preview area with the play bar and transition point readout -->
 
 - **Size and amount** - sliders for how big the images are, how many of them, how long
   the clip runs, and how random the sizes should be.
-<!-- SCREENSHOT: the Adjust group -->
 
 - **Logo** - drop a logo that lands on top at the moment the screen is covered, then
   leaves with everything else. Ten entry animations and a nine point placement grid.
-<!-- SCREENSHOT: the Logo group with a logo loaded -->
 
 - **Sound** - add an mp3 or wav with volume and fade out. It plays along with the
   preview so you can line it up before you render.
-<!-- SCREENSHOT: the Sound row -->
 
 - **Weighting** - click an image thumbnail to make it show up two or three times as
   often as the others.
@@ -52,11 +66,9 @@ prompts and if it was good, I went with it.
 - **Update check** - the app looks at the Releases page when it starts and puts a
   banner across the top when there is a newer version. Hit Not now and it stops asking
   about that one.
-<!-- SCREENSHOT: the update banner across the top of the window -->
 
 - **Render all styles** - renders your settings once per style so you can pick the one
   you like, then saves all fifteen to a folder.
-<!-- SCREENSHOT: the result panel after a batch render -->
 
 The app tells you the transition point in milliseconds, which is the one number OBS
 needs. There is a Copy button next to it.
@@ -86,8 +98,6 @@ The exe icon comes from `S.png`. Swap that file for your own and build again, or
 4. Click **Generate**, then **Save file...**.
 5. In OBS: **Scene Transitions > + > Stinger**, pick the file, and paste in the
    transition point the app showed you.
-
-<!-- SCREENSHOT: the OBS stinger settings with the transition point filled in -->
 
 ## Good to know
 
@@ -121,6 +131,12 @@ The render engine also runs on its own without the window:
 ```
 python engine.py --images a.png b.png --style wave --out stinger.webm \
     --direction right --direction-out down
+```
+
+Effects need no images:
+
+```
+python engine.py --style smoke --out smoke.webm --hue 40 --saturation 120
 ```
 
 `python engine.py --help` lists every option.
